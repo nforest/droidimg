@@ -176,6 +176,8 @@ def do_guess_start_address(kallsyms, vmlinux):
             for i in xrange(0,0x100000,step):
                 _startaddr_from_processor = addr_base + i
                 fileoffset = lookup_processor_addr - _startaddr_from_processor
+                if fileoffset > len(vmlinux):
+                        break
                 if lookup_processor_addr == INT(fileoffset, vmlinux):
                     break
 
