@@ -355,6 +355,9 @@ def load_file(li, neflags, format):
     idaapi.add_segm_ex(s,".text","CODE",ADDSEG_OR_DIE)
     
     for i in xrange(kallsyms['numsyms']):
+        if kallsyms['name'][i] in ['skip_ftrace_call']:
+            continue            
+
         if kallsyms['type'][i] in ['t','T']:
             idaapi.add_entry(kallsyms['address'][i], kallsyms['address'][i], kallsyms['name'][i], 1)
         else:
