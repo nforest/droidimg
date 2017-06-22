@@ -177,7 +177,7 @@ def do_guess_start_address(kallsyms, vmlinux):
             if kallsyms['arch'] == 32:
                 addr_base = 0xC0008000
             else:
-                addr_base = 0xffffffc000080000
+                addr_base = 0xffffff8008080000
         
             for i in xrange(0,0x100000,step):
                 _startaddr_from_processor = addr_base + i
@@ -192,9 +192,9 @@ def do_guess_start_address(kallsyms, vmlinux):
 
     start_addrs = [_startaddr_from_banner, _startaddr_from_processor, _startaddr_from_xstext]
     if kallsyms['arch']==64 and _startaddr_from_banner!=_startaddr_from_xstext:
-         start_addrs.append( 0xffffffc000000000 + INT(8, vmlinux) )
+         start_addrs.append( 0xffffff8008000000 + INT(8, vmlinux) )
 
-    # print '[+]kallsyms_guess_start_addresses = ',  hex(0xffffffc000000000 + INT(8, vmlinux)) if kallsyms['arch']==64 else '', hex(_startaddr_from_banner), hex(_startaddr_from_processor), hex(_startaddr_from_xstext)
+    # print '[+]kallsyms_guess_start_addresses = ',  hex(0xffffff8008000000 + INT(8, vmlinux)) if kallsyms['arch']==64 else '', hex(_startaddr_from_banner), hex(_startaddr_from_processor), hex(_startaddr_from_xstext)
     
     for addr in start_addrs:
         if addr % 0x1000 == 0:
@@ -210,7 +210,7 @@ def do_address_table(kallsyms, offset, vmlinux):
     if kallsyms['arch'] == 32:
         addr_base = 0xC0000000
     else:
-        addr_base = 0xffffffc000000000
+        addr_base = 0xffffff8008000000
 
     kallsyms['address'] = []
     for i in xrange(offset, len(vmlinux), step):
@@ -269,7 +269,7 @@ def do_get_arch(kallsyms, vmlinux):
         step = 8
         offset = 0
         vmlen  = len(vmlinux) - len(vmlinux)%8
-        addr_base = 0xffffffc000000000
+        addr_base = 0xffffff8008000000
         while offset+step < vmlen:
           for i in xrange(offset, vmlen, step):
                 if INT64(i, vmlinux) < addr_base:
@@ -355,9 +355,6 @@ def load_file(li, neflags, format):
     idaapi.add_segm_ex(s,".text","CODE",ADDSEG_OR_DIE)
     
     for i in xrange(kallsyms['numsyms']):
-        if kallsyms['name'][i] in ['skip_ftrace_call']:
-            continue            
-
         if kallsyms['type'][i] in ['t','T']:
             idaapi.add_entry(kallsyms['address'][i], kallsyms['address'][i], kallsyms['name'][i], 1)
         else:
