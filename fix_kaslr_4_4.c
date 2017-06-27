@@ -131,6 +131,9 @@ static inline int parse_rela_sect_smart()
 				cont++;
 			}
 		}
+		else if ((p->info & 0xfff) == 0x101) {
+			cont++;
+		}
 		else {
 			cont = 0;
 		}
@@ -139,9 +142,12 @@ static inline int parse_rela_sect_smart()
 			rela_start = p - (CONT_THRESHOLD - 1);
 			printf("rela_start = %p\n", KERN_VA(p));
 
-			while (p->info == R_AARCH64_RELATIVE || p->info == R_AARCH64_ABS) {
+			while (p->info == R_AARCH64_RELATIVE || 
+				   p->info == R_AARCH64_ABS ||
+				   (p->info & 0xfff) == 0x101) {
 				p++;
 			}
+			printf("p->info = 0x%x\n", p->info);
 			rela_end = p;
 			printf("rela_end = %p\n", KERN_VA(p));
 
