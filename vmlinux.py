@@ -213,12 +213,16 @@ def do_address_table(kallsyms, offset, vmlinux):
         addr_base = 0xffffff8008000000
 
     kallsyms['address'] = []
+    prev_addr = 0
     for i in xrange(offset, len(vmlinux), step):
         addr = INT(i, vmlinux)
         if addr < addr_base:
             return (i-offset)/step
+        elif addr < prev_addr:
+            return (i-offset)/step
         else:
             kallsyms['address'].append(addr)
+            prev_addr = addr
 
     return 0
 
