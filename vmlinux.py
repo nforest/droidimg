@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
-# @Date    : 2014-08-27 21:49:19
-# @Author  : nforest@live.cn
+# @Date    : 2017-09-15 20:54:10
+# @Author  : nforest@outlook.com
 
 import os
 import re
@@ -9,16 +9,20 @@ import sys
 import time
 import struct
 
+#////////////////////////////////////////////////////////////////////////////////////////////
+
 try:
     import idaapi
-    ida = True
 except:
-    ida = False
+    idaapi = None
+
+radare2 = True if 'R2PIPE_IN' in os.environ else False
+
 
 #////////////////////////////////////////////////////////////////////////////////////////////
 
 kallsyms = {
-            'arch'          :32,
+            'arch'          :0,
             '_start'        :0,
             'numsyms'        :0,
             'address'       :[],
@@ -293,14 +297,13 @@ def do_get_arch(kallsyms, vmlinux):
 
     print '[+]kallsyms_arch = ', kallsyms['arch']
 
-#/////////////
-
-
 def print_kallsyms(kallsyms, vmlinux):
     buf = '\n'.join( '%x %c %s'%(kallsyms['address'][i],kallsyms['type'][i],kallsyms['name'][i]) for i in xrange(kallsyms['numsyms']) ) 
-    open('kallsyms','w').write(buf)
+    # open('kallsyms','w').write(buf)
+    print buf
 
 #////////////////////////////////////////////////////////////////////////////////////////////
+# IDA Pro Plugin Support
 
 def accept_file(li, n):
     """
@@ -324,7 +327,7 @@ def accept_file(li, n):
     # if magic != 'ANDROID!':
     #     return 0
 
-    return "Android OS Kernel(ARM)"
+    return "Android/Linux Kernel Image(ARM)"
 
 def load_file(li, neflags, format):
     """
@@ -364,13 +367,57 @@ def load_file(li, neflags, format):
         else:
             idaapi.add_entry(kallsyms['address'][i], kallsyms['address'][i], kallsyms['name'][i], 0)
 
-    print "Android vmlinux loaded..."
+    print "Android/Linux vmlinux loaded..."
+    return 1
+
+#////////////////////////////////////////////////////////////////////////////////////////////
+# Radare2 Plugin Support
+
+def r2():
+    r2p = r2pipe.open()
+    info = r2p.cmdj("ij")
+    with open(info["core"]["file"], 'rb') as f:
+            vmlinux = f.read()
+
+    do_get_arch(kallsyms, vmlinux)
+    do_kallsyms(kallsyms, vmlinux)
+    # print_kallsyms(kallsyms, vmlinux)
+
+    if kallsyms['numsyms'] == 0:
+        print '[!]get kallsyms error...'
+        return 0
+
+    r2p.cmd("e asm.arch = arm")
+    r2p.cmd("e asm.bits = %d" % kallsyms['arch'])
+
+    siol_map = r2p.cmdj("omj")[0]["map"]
+    set_baddr = "omr " + str(siol_map) + " " + str(kallsyms["_start"])
+    r2p.cmd(set_baddr)
+
+    seg = "S 0 " + str(kallsyms["_start"]) + " " + str(len(vmlinux)) + " .text rx"
+    r2p.cmd(seg)
+
+    r2p.cmd("fs symbols")
+    for i in xrange(kallsyms['numsyms']):
+        if kallsyms["address"][i] == 0:
+            continue
+        if kallsyms['type'][i] in ['t','T']:
+            cmd = "f fcn." + kallsyms["name"][i] + " @ " + str(kallsyms["address"][i])
+            r2p.cmd(cmd)
+        else:
+            cmd = "f sym." + kallsyms["name"][i] + " @ " + str(kallsyms["address"][i])
+            r2p.cmd(cmd)
+
+    r2p.cmd("e anal.strings = true")
+    r2p.cmd("s " + str(kallsyms["_start"]))
+
+    print "Android/Linux vmlinux loaded..."
     return 1
 
 #////////////////////////////////////////////////////////////////////////////////////////////
 
 def help():
-    print 'Usage:  vmlinux.py [vmlinux FILE]\n'
+    print 'Usage:  vmlinux.py [vmlinux image]\n'
     exit()
 
 def main(argv):
@@ -387,6 +434,14 @@ def main(argv):
             print '[!]get kallsyms error...'
     else:
         print '[!]vmlinux does not exist...'
-    
-if not ida:
+
+#////////////////////////////////////////////////////////////////////////////////////////////
+
+if idaapi:
+    pass
+elif radare2:
+    import r2pipe
+    r2()
+else:
     main(sys.argv)
+        
