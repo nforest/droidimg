@@ -319,9 +319,11 @@ def accept_file(li, n):
                to indicate preferred format
     """
 
+    # ida 7+ compatibility, n is filename
     # we support only one format per file
-    if n > 0:
-        return 0
+    if isinstance(n, (int, long)):
+        if n > 0:
+            return 0
 
     # magic = li.read(8)
     # if magic != 'ANDROID!':
@@ -349,7 +351,7 @@ def load_file(li, neflags, format):
         print '[!]get kallsyms error...'
         return 0
     
-    idaapi.set_processor_type("arm", SETPROC_ALL|SETPROC_FATAL)
+    idaapi.set_processor_type("arm", idaapi.SETPROC_ALL|idaapi.SETPROC_FATAL)
     if kallsyms['arch'] == 64:
         idaapi.get_inf_structure().lflags |= idaapi.LFLG_64BIT
 
@@ -359,7 +361,7 @@ def load_file(li, neflags, format):
     s.bitness = kallsyms['arch'] / 32
     s.startEA = kallsyms['_start']
     s.endEA = kallsyms['_start']+li.size()
-    idaapi.add_segm_ex(s,".text","CODE",ADDSEG_OR_DIE)
+    idaapi.add_segm_ex(s,".text","CODE",idaapi.ADDSEG_OR_DIE)
     
     for i in xrange(kallsyms['numsyms']):
         if kallsyms['type'][i] in ['t','T']:
