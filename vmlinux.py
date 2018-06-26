@@ -209,6 +209,46 @@ def do_guess_start_address(kallsyms, vmlinux):
 
     return kallsyms['_start']
 
+def do_offset_table(kallsyms, start, vmlinux):
+    # aarch64 only!
+    step = 4    # this is fixed step
+
+    kallsyms['address'] = []
+    prev_offset = 0
+    relative_base = 0xffffff8008080000
+
+    # status
+    #   0: looking for 1st 00 00 00 00
+    #   1: looking for 2nd 00 00 00 00
+    #   2: looking for non-zero ascending offset seq
+    status = 0
+
+    for i in xrange(start, len(vmlinux), step):
+        offset = INT32(i, vmlinux)
+        # print hex(i + 0xffffff8008080000), hex(offset)
+
+        if status == 0:
+            if offset == 0:
+                kallsyms['address'].append(relative_base)
+                status = 1
+            else:
+                return 0
+        elif status == 1:
+            if offset == 0:
+                kallsyms['address'].append(relative_base)
+                status = 2
+            else:
+                return 1
+        elif status == 2:
+            if (offset > 0) and (offset >= prev_offset):
+                kallsyms['address'].append(relative_base + offset)
+                prev_offset = offset
+            else:
+                return (i - start) / step
+
+    return 0
+
+
 def do_address_table(kallsyms, offset, vmlinux):
     step = kallsyms['arch'] / 8
     if kallsyms['arch'] == 32:
@@ -232,28 +272,56 @@ def do_address_table(kallsyms, offset, vmlinux):
 
 def do_kallsyms(kallsyms, vmlinux):
     step = kallsyms['arch'] / 8
+    min_numsyms = 30000
 
     offset = 0
     vmlen  = len(vmlinux)
+    is_offset_table = 0
+
     while offset+step < vmlen:
         num = do_address_table(kallsyms, offset, vmlinux)
-        if num > 30000:
+        if num > min_numsyms:
             kallsyms['numsyms'] = num
             break
         else:
             offset += (num+1)*step
 
     if kallsyms['numsyms'] == 0:
+        print '[!]could be offset table...'
+        is_offset_table = 1
+        # offset = 0x1280000
+        offset = 0
+        step = 4
+        while offset+step < vmlen:
+            num = do_offset_table(kallsyms, offset, vmlinux)
+            if num > min_numsyms:
+                kallsyms['numsyms'] = num
+                break
+            else:
+                offset += (num+1) * step
+        step = kallsyms['arch'] / 8 # recover normal step
+
+
+    if kallsyms['numsyms'] == 0:
         print '[!]lookup_address_table error...'
         return
+
+    print '[+]numsyms: ', kallsyms['numsyms']
 
     kallsyms['address_table'] = offset  
     print '[+]kallsyms_address_table = ', hex(offset)
 
-    offset += kallsyms['numsyms']*step
-    offset = STRIPZERO(offset, vmlinux, step)
+    if is_offset_table == 0:
+        offset += kallsyms['numsyms']*step
+        offset = STRIPZERO(offset, vmlinux, step)
+    else:
+        offset += kallsyms['numsyms']*4
+        offset = STRIPZERO(offset, vmlinux, 4)
+        offset += step  # skip kallsyms_relative_base
+        offset = STRIPZERO(offset, vmlinux, 4)
     num = INT(offset, vmlinux)
     offset += step
+
 
     print '[+]kallsyms_num = ', kallsyms['numsyms'], num
     if abs(num-kallsyms['numsyms']) > 128:
