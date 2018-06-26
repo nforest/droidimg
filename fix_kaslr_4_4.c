@@ -117,6 +117,7 @@ static inline int alloc_kern_buf()
 static inline int parse_rela_sect_smart()
 {
 	#define CONT_THRESHOLD	10
+	#define GAP_THRESHOLD	5
 	#define MIN_ADDR		0xffffff8000000000UL
 
 	struct rela_entry_t *p;
@@ -142,10 +143,31 @@ static inline int parse_rela_sect_smart()
 			rela_start = p - (CONT_THRESHOLD - 1);
 			printf("rela_start = %p\n", KERN_VA(p));
 
-			while (p->info == R_AARCH64_RELATIVE || 
-				   p->info == R_AARCH64_ABS ||
-				   (p->info & 0xfff) == 0x101) {
-				p++;
+			for (;;) {
+				struct rela_entry_t *p1;
+
+				while (p->info == R_AARCH64_RELATIVE || 
+					   p->info == R_AARCH64_ABS ||
+					   (p->info & 0xfff) == 0x101) {
+					p++;
+				}
+
+				p1 = p;
+				while ((p1 - p) < GAP_THRESHOLD) {
+					if (p1->info == R_AARCH64_RELATIVE || 
+				   		p1->info == R_AARCH64_ABS ||
+				   		(p1->info & 0xfff) == 0x101) {
+						break;
+					}
+					p1++;
+				}
+
+				if ((p1 - p) >= GAP_THRESHOLD) {
+					break;
+				}
+				else {
+					p = p1;
+				}
 			}
 			printf("p->info = 0x%x\n", p->info);
 			rela_end = p;
@@ -186,6 +208,7 @@ static inline int relocate_kernel()
 
 		if (sym_info == R_AARCH64_RELATIVE) {
 			size_t new_addr = sym_addr + KERNEL_SLIDE;
+			// printf("<%p>\n", (void *)new_addr);
 			*(size_t *)LOCAL_VA(p) = new_addr;			
 		}
 		else if ((uint32_t)sym_info == R_AARCH64_ABS) {
@@ -197,6 +220,7 @@ static inline int relocate_kernel()
 				if ((int64_t)elf64_sym->st_shndx != -15) {
 					real_stext += KERNEL_SLIDE;
 				}
+				// printf("[%p]\n", (void *)(real_stext + sym_addr));
 				*(size_t *)LOCAL_VA(p) = real_stext + sym_addr;
 			}			
 		}
