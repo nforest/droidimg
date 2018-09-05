@@ -425,12 +425,37 @@ def load_file(li, neflags, format):
 
     li.file2base(0, kallsyms['_start'], kallsyms['_start']+li.size(), True)
 
+    sinittext_addr = 0
+    max_sym_addr = 0
+    for i in xrange(kallsyms['numsyms']):
+        if kallsyms['name'][i] == '_sinittext':
+            sinittext_addr = kallsyms['address'][i]
+        if kallsyms['address'][i] > max_sym_addr:
+            max_sym_addr = kallsyms['address'][i]
+    max_sym_addr = max_sym_addr + 1024
+
+    if (kallsyms['_start']+li.size()) > max_sym_addr:
+        max_sym_addr = kallsyms['_start']+li.size()
+
+
     s = idaapi.segment_t()
     s.bitness = kallsyms['arch'] / 32
     s.startEA = kallsyms['_start']
-    s.endEA = kallsyms['_start']+li.size()
+    if sinittext_addr == 0:
+        s.endEA = max_sym_addr
+    else:
+        s.endEA = sinittext_addr
+    s.perm = 5
     idaapi.add_segm_ex(s,".text","CODE",idaapi.ADDSEG_OR_DIE)
     
+    if sinittext_addr > 0:
+        s = idaapi.segment_t()
+        s.bitness = kallsyms['arch'] / 32
+        s.startEA = sinittext_addr
+        s.endEA = max_sym_addr
+        s.perm = 7
+        idaapi.add_segm_ex(s,".data","DATA",idaapi.ADDSEG_OR_DIE)
+
     for i in xrange(kallsyms['numsyms']):
         if kallsyms['type'][i] in ['t','T']:
             idaapi.add_entry(kallsyms['address'][i], kallsyms['address'][i], kallsyms['name'][i], 1)
