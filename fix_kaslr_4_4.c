@@ -116,7 +116,7 @@ static inline int alloc_kern_buf()
  */
 static inline int parse_rela_sect_smart()
 {
-	#define CONT_THRESHOLD	10
+	#define CONT_THRESHOLD	50
 	#define GAP_THRESHOLD	5
 	#define MIN_ADDR		0xffffff8000000000UL
 
