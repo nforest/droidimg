@@ -201,7 +201,7 @@ def do_guess_start_address(kallsyms, vmlinux):
     # print '[+]kallsyms_guess_start_addresses = ',  hex(0xffffff8008000000 + INT(8, vmlinux)) if kallsyms['arch']==64 else '', hex(_startaddr_from_banner), hex(_startaddr_from_processor), hex(_startaddr_from_xstext)
     
     for addr in start_addrs:
-        if addr % 0x1000 == 0:
+        if addr != 0 and addr % 0x1000 == 0:
             kallsyms['_start']= addr
             break
     else:
