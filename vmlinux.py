@@ -210,12 +210,14 @@ def do_guess_start_address(kallsyms, vmlinux):
     return kallsyms['_start']
 
 def do_offset_table(kallsyms, start, vmlinux):
-    # aarch64 only!
     step = 4    # this is fixed step
 
     kallsyms['address'] = []
     prev_offset = 0
-    relative_base = 0xffffff8008080000
+    if kallsyms['arch'] == 32:
+        relative_base = 0xC0008000
+    else:
+        relative_base = 0xffffff8008080000
 
     # status
     #   0: looking for 1st 00 00 00 00
@@ -428,11 +430,16 @@ def load_file(li, neflags, format):
     sinittext_addr = 0
     max_sym_addr = 0
     for i in xrange(kallsyms['numsyms']):
+        if kallsyms['arch'] == 32:
+            if kallsyms['address'][i] > 0xd0000000:
+                continue
+
         if kallsyms['name'][i] == '_sinittext':
             sinittext_addr = kallsyms['address'][i]
         if kallsyms['address'][i] > max_sym_addr:
             max_sym_addr = kallsyms['address'][i]
     max_sym_addr = max_sym_addr + 1024
+    print "max_sym_addr = ", hex(max_sym_addr)
 
     if (kallsyms['_start']+li.size()) > max_sym_addr:
         max_sym_addr = kallsyms['_start']+li.size()
