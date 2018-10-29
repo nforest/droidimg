@@ -291,16 +291,19 @@ def do_kallsyms(kallsyms, vmlinux):
     if kallsyms['numsyms'] == 0:
         print '[!]could be offset table...'
         is_offset_table = 1
-        # offset = 0x1280000
         offset = 0
         step = 4
         while offset+step < vmlen:
             num = do_offset_table(kallsyms, offset, vmlinux)
+
             if num > min_numsyms:
                 kallsyms['numsyms'] = num
                 break
             else:
-                offset += (num+1) * step
+                if num > 2:
+                    offset += (num) * step
+                else:
+                    offset += step
         step = kallsyms['arch'] / 8 # recover normal step
 
 
