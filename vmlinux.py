@@ -1,7 +1,5 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
-# @Date    : 2017-09-15 20:54:10
-# @Author  : nforest@outlook.com
 
 import os
 import re
