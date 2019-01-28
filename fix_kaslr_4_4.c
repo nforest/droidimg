@@ -12,7 +12,8 @@
 
 #include <linux/limits.h>
 
-#define KERNEL_TEXT			(0xffffff8008080000UL)
+#define KERNEL_TEXT   (va_kern_text[va_bits])
+#define MIN_ADDR      (va_min_addr[va_bits])
 #define KERN_VA(p)			(void *)((unsigned long)(p) - (unsigned long)kern_buf + KERNEL_TEXT)
 #define LOCAL_VA(p)			(void *)((unsigned long)(p) - KERNEL_TEXT + (unsigned long)kern_buf)
 
@@ -21,12 +22,20 @@
 #define R_AARCH64_RELATIVE	(0x403)
 #define R_AARCH64_ABS		(0x101)
 
+#define ARCH_BITS   (64)
+
 uint8_t 	*kern_buf;
 size_t		kern_size;
 size_t		kern_mmap_size;
 
 char		infile[PATH_MAX];
 char		outfile[PATH_MAX];
+
+int va_bits = 39;
+
+size_t va_kern_text[ARCH_BITS] = {0};
+size_t va_min_addr[ARCH_BITS] = {0};
+
 
 struct rela_entry_t {
 	uint64_t	offset;
@@ -118,13 +127,16 @@ static inline int parse_rela_sect_smart()
 {
 	#define CONT_THRESHOLD	50
 	#define GAP_THRESHOLD	5
-	#define MIN_ADDR		0xffffff8000000000UL
-
 	struct rela_entry_t *p;
 	int cont = 0;
 
 	p = (struct rela_entry_t *)kern_buf;
 	for (;;) {
+	if ((size_t)p - (size_t)kern_buf >= kern_mmap_size) {
+		printf("Failed to locate .rela section. Bail out.\n");
+		exit(-1);
+	}
+
 		if (p->info == R_AARCH64_RELATIVE || 
 			p->info == R_AARCH64_ABS) {
 			if (p->offset >= MIN_ADDR &&
@@ -169,7 +181,7 @@ static inline int parse_rela_sect_smart()
 					p = p1;
 				}
 			}
-			printf("p->info = 0x%x\n", p->info);
+			printf("p->info = 0x%lx\n", p->info);
 			rela_end = p;
 			printf("rela_end = %p\n", KERN_VA(p));
 
@@ -252,9 +264,30 @@ static inline int write_outfile()
 
 int main(int argc, char **argv)
 {
-	if (argc != 3) {
-		printf("Usage: fix_kaslr <infile> <outfile>\n");
+	/* initialize va */
+	va_kern_text[39] = 0xffffff8008080000UL;
+	va_min_addr[39] = 0xffffff8000000000UL;
+	va_kern_text[48] = 0xFFFF000008080000UL;
+	va_min_addr[48] = 0xFFFF000000000000UL;
+
+	if (argc != 3 && argc != 4) {
+		printf("Usage: fix_kaslr_arm64 <infile> <outfile> [va_bits]\n");
+		printf("By default, va_bits = 39\n");
 		return -1;
+	}
+
+	if (argc == 4) {
+		va_bits = (int)strtol(argv[3], NULL, 10);
+		if (va_bits < 0 || va_bits >= ARCH_BITS) {
+			printf("Invalid va_bits!\n");
+			return -1;
+		}
+
+		if (va_kern_text[va_bits] == 0 ||
+		    va_min_addr[va_bits] == 0) {
+			printf("Unsupported va_bits!\n");
+			return -1;
+		}
 	}
 
 	strncpy(infile, argv[1], PATH_MAX);
