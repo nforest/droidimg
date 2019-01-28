@@ -212,10 +212,7 @@ def do_offset_table(kallsyms, start, vmlinux):
 
     kallsyms['address'] = []
     prev_offset = 0
-    if kallsyms['arch'] == 32:
-        relative_base = 0xC0008000
-    else:
-        relative_base = 0xffffff8008080000
+    relative_base = 0   # We will determine this later
 
     # status
     #   0: looking for 1st 00 00 00 00
@@ -277,6 +274,7 @@ def do_kallsyms(kallsyms, vmlinux):
     offset = 0
     vmlen  = len(vmlinux)
     is_offset_table = 0
+    kallsyms_relative_base = 0
 
     while offset+step < vmlen:
         num = do_address_table(kallsyms, offset, vmlinux)
@@ -320,6 +318,13 @@ def do_kallsyms(kallsyms, vmlinux):
     else:
         offset += kallsyms['numsyms']*4
         offset = STRIPZERO(offset, vmlinux, 4)
+        kallsyms_relative_base = INT(offset, vmlinux)
+
+        # Update addresses
+        for idx in range(0, len(kallsyms['address'])):
+            kallsyms['address'][idx] += kallsyms_relative_base
+        print '[+]kallsyms_relative_base = ', hex(kallsyms_relative_base)
+
         offset += step  # skip kallsyms_relative_base
         offset = STRIPZERO(offset, vmlinux, 4)
     num = INT(offset, vmlinux)
