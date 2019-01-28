@@ -169,7 +169,7 @@ static inline int parse_rela_sect_smart()
 					p = p1;
 				}
 			}
-			printf("p->info = %#lx\n", p->info);
+			printf("p->info = 0x%x\n", p->info);
 			rela_end = p;
 			printf("rela_end = %p\n", KERN_VA(p));
 
