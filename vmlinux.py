@@ -226,20 +226,63 @@ def do_offset_table(kallsyms, start, vmlinux):
 
         if status == 0:
             if offset == 0:
-                kallsyms['address'].append(relative_base)
+                kallsyms['address'].append(relative_base + offset)
                 status = 1
             else:
                 return 0
         elif status == 1:
             if offset == 0:
-                kallsyms['address'].append(relative_base)
+                kallsyms['address'].append(relative_base + offset)
                 status = 2
             else:
                 return 1
         elif status == 2:
-            if (offset > 0) and (offset >= prev_offset):
+            if (offset > 0) and (offset >= prev_offset) and (offset < 0x80000000) and \
+            (prev_offset != 0 or offset - prev_offset < 0xf8000):   # For latest aarch32 kernels, since kallsyms_offsets start with 0xf8000
                 kallsyms['address'].append(relative_base + offset)
                 prev_offset = offset
+            else:
+                return (i - start) / step
+
+    return 0
+
+def do_offset_table_arm(kallsyms, start, vmlinux):
+    step = 4    # this is fixed step
+
+    kallsyms['address'] = []
+    prev_offset = 0
+    relative_base = 0   # We will determine this later
+
+    # status
+    #   0: looking for 1st 00 80 0f 00
+    #   1: looking for 2nd 00 80 0f 00
+    #   2: looking for non-zero ascending offset seq
+    status = 0
+
+    for i in xrange(start, len(vmlinux), step):
+        offset = INT32(i, vmlinux)
+        # print hex(i + 0xffffff8008080000), hex(offset)
+
+        if status == 0:
+            if offset == 0xf8000:
+                kallsyms['address'].append(relative_base + offset)
+                status = 1
+                print "status 1"
+            else:
+                return 0
+        elif status == 1:
+            if offset == 0xf8000:
+                kallsyms['address'].append(relative_base + offset)
+                status = 2
+                print("status 2, %x" % (i + 0xc0008000))
+                prev_offset = offset
+            else:
+                return 1
+        elif status == 2:
+            if (offset > 0) and (offset >= prev_offset) and (offset < 0x80000000):
+                kallsyms['address'].append(relative_base + offset)
+                prev_offset = offset
+                print("%x" % (offset))
             else:
                 return (i - start) / step
 
@@ -269,7 +312,7 @@ def do_address_table(kallsyms, offset, vmlinux):
 
 def do_kallsyms(kallsyms, vmlinux):
     step = kallsyms['arch'] / 8
-    min_numsyms = 30000
+    min_numsyms = 20000
 
     offset = 0
     vmlen  = len(vmlinux)
@@ -300,6 +343,24 @@ def do_kallsyms(kallsyms, vmlinux):
                     offset += (num) * step
                 else:
                     offset += step
+
+        # For some aarch32 kernels, kallsyms_offset beign with 0xf8000
+        if kallsyms['numsyms'] == 0 and \
+            kallsyms['arch'] == 32:
+            offset = 0
+            while offset+step < vmlen:
+                num = do_offset_table_arm(kallsyms, offset, vmlinux)
+
+                if num > min_numsyms:
+                    kallsyms['numsyms'] = num
+                    break
+                else:
+                    if num > 2:
+                        offset += (num) * step
+                    else:
+                        offset += step
+
+
         step = kallsyms['arch'] / 8 # recover normal step
 
 
