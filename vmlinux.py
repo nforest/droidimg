@@ -7,6 +7,8 @@ import sys
 import time
 import struct
 
+from builtins import range
+
 #////////////////////////////////////////////////////////////////////////////////////////////
 
 try:
@@ -34,7 +36,7 @@ kallsyms = {
             }
 
 def INT(offset, vmlinux):
-    bytes = kallsyms['arch'] / 8
+    bytes = kallsyms['arch'] // 8
     s = vmlinux[offset:offset+bytes]
     f = 'I' if bytes==4 else 'Q'
     (num,) = struct.unpack(f, s)
@@ -57,7 +59,7 @@ def SHORT(offset, vmlinux):
 
 def STRIPZERO(offset, vmlinux, step=4):
     NOTZERO = INT32 if step==4 else INT
-    for i in xrange(offset,len(vmlinux),step):
+    for i in range(offset,len(vmlinux),step):
         if NOTZERO(i, vmlinux):
             return i
 
@@ -71,10 +73,10 @@ def do_token_table(kallsyms, offset, vmlinux):
     kallsyms['token_table'] = offset    
     print('[+]kallsyms_token_table = ', hex(offset))
 
-    for i in xrange(offset,len(vmlinux)):
+    for i in range(offset,len(vmlinux)):
         if SHORT(i,vmlinux) == 0:
             break
-    for i in xrange(i, len(vmlinux)):
+    for i in range(i, len(vmlinux)):
         if ord(vmlinux[i]):
             break
     offset = i-2
@@ -85,7 +87,7 @@ def do_marker_table(kallsyms, offset, vmlinux):
     kallsyms['marker_table'] = offset   
     print('[+]kallsyms_marker_table = ', hex(offset))
 
-    offset += (((kallsyms['numsyms']-1)>>8)+1)*(kallsyms['arch']/8)
+    offset += (((kallsyms['numsyms']-1)>>8)+1)*(kallsyms['arch'] // 8)
     offset = STRIPZERO(offset, vmlinux)
 
     do_token_table(kallsyms, offset, vmlinux)
@@ -93,7 +95,7 @@ def do_marker_table(kallsyms, offset, vmlinux):
 
 def do_type_table(kallsyms, offset, vmlinux):
     flag = True
-    for i in xrange(offset,offset+256*4,4):
+    for i in range(offset,offset+256*4,4):
         if INT(i, vmlinux) & ~0x20202020 != 0x54545454:
             flag = False
             break
@@ -102,21 +104,21 @@ def do_type_table(kallsyms, offset, vmlinux):
         kallsyms['type_table'] = offset
 
         while INT(offset, vmlinux):
-            offset += (kallsyms['arch']/8)
+            offset += (kallsyms['arch'] // 8)
         offset = STRIPZERO(offset, vmlinux)
     else:
         kallsyms['type_table'] = 0
     
     print('[+]kallsyms_type_table = ', hex(kallsyms['type_table']))
 
-    offset -= (kallsyms['arch']/8)
+    offset -= (kallsyms['arch'] // 8)
     do_marker_table(kallsyms, offset, vmlinux)
             
 def do_name_table(kallsyms, offset, vmlinux):
     kallsyms['name_table'] = offset 
     print('[+]kallsyms_name_table = ', hex(offset))
 
-    for i in xrange(kallsyms['numsyms']):
+    for i in range(kallsyms['numsyms']):
         length = ord(vmlinux[offset])
         offset += length+1
     while offset%4 != 0:
@@ -127,7 +129,7 @@ def do_name_table(kallsyms, offset, vmlinux):
 
     # decompress name and type
     name_offset = 0
-    for i in xrange(kallsyms['numsyms']):
+    for i in range(kallsyms['numsyms']):
         offset = kallsyms['name_table']+name_offset
         length = ord(vmlinux[offset])
 
@@ -160,7 +162,7 @@ def do_guess_start_address(kallsyms, vmlinux):
     _startaddr_from_banner = 0
     _startaddr_from_processor = 0
     
-    for i in xrange(kallsyms['numsyms']):
+    for i in range(kallsyms['numsyms']):
         if kallsyms['name'][i] in ['_text', 'stext', '_stext', '_sinittext', '__init_begin']:
             if hex(kallsyms['address'][i]):
                 if _startaddr_from_xstext==0 or kallsyms['address'][i]<_startaddr_from_xstext:
@@ -175,13 +177,13 @@ def do_guess_start_address(kallsyms, vmlinux):
         elif kallsyms['name'][i] == '__lookup_processor_type_data':
             lookup_processor_addr = kallsyms['address'][i]
 
-            step = kallsyms['arch'] / 8
+            step = kallsyms['arch'] // 8
             if kallsyms['arch'] == 32:
                 addr_base = 0xC0008000
             else:
                 addr_base = 0xffffff8008080000
         
-            for i in xrange(0,0x100000,step):
+            for i in range(0,0x100000,step):
                 _startaddr_from_processor = addr_base + i
                 fileoffset = lookup_processor_addr - _startaddr_from_processor
                 if fileoffset+step > len(vmlinux):
@@ -220,7 +222,7 @@ def do_offset_table(kallsyms, start, vmlinux):
     #   2: looking for non-zero ascending offset seq
     status = 0
 
-    for i in xrange(start, len(vmlinux), step):
+    for i in range(start, len(vmlinux), step):
         offset = INT32(i, vmlinux)
         # print hex(i + 0xffffff8008080000), hex(offset)
 
@@ -242,7 +244,7 @@ def do_offset_table(kallsyms, start, vmlinux):
                 kallsyms['address'].append(relative_base + offset)
                 prev_offset = offset
             else:
-                return (i - start) / step
+                return (i - start) // step
 
     return 0
 
@@ -259,7 +261,7 @@ def do_offset_table_arm(kallsyms, start, vmlinux):
     #   2: looking for non-zero ascending offset seq
     status = 0
 
-    for i in xrange(start, len(vmlinux), step):
+    for i in range(start, len(vmlinux), step):
         offset = INT32(i, vmlinux)
         # print hex(i + 0xffffff8008080000), hex(offset)
 
@@ -281,13 +283,13 @@ def do_offset_table_arm(kallsyms, start, vmlinux):
                 kallsyms['address'].append(relative_base + offset)
                 prev_offset = offset
             else:
-                return (i - start) / step
+                return (i - start) // step
 
     return 0
 
 
 def do_address_table(kallsyms, offset, vmlinux):
-    step = kallsyms['arch'] / 8
+    step = kallsyms['arch'] // 8
     if kallsyms['arch'] == 32:
         addr_base = 0xC0000000
     else:
@@ -295,12 +297,12 @@ def do_address_table(kallsyms, offset, vmlinux):
 
     kallsyms['address'] = []
     prev_addr = 0
-    for i in xrange(offset, len(vmlinux), step):
+    for i in range(offset, len(vmlinux), step):
         addr = INT(i, vmlinux)
         if addr < addr_base:
-            return (i-offset)/step
+            return (i-offset) // step
         elif addr < prev_addr:
-            return (i-offset)/step
+            return (i-offset) // step
         else:
             kallsyms['address'].append(addr)
             prev_addr = addr
@@ -308,7 +310,7 @@ def do_address_table(kallsyms, offset, vmlinux):
     return 0
 
 def do_kallsyms(kallsyms, vmlinux):
-    step = kallsyms['arch'] / 8
+    step = kallsyms['arch'] // 8
     min_numsyms = 20000
 
     offset = 0
@@ -358,7 +360,7 @@ def do_kallsyms(kallsyms, vmlinux):
                         offset += step
 
 
-        step = kallsyms['arch'] / 8 # recover normal step
+        step = kallsyms['arch'] // 8 # recover normal step
 
 
     if kallsyms['numsyms'] == 0:
@@ -396,7 +398,7 @@ def do_kallsyms(kallsyms, vmlinux):
             return
 
     if num > kallsyms['numsyms']:
-        for i in xrange(kallsyms['numsyms'],num):
+        for i in range(kallsyms['numsyms'],num):
             kallsyms['address'].insert(0,0)
     kallsyms['numsyms'] = num
 
@@ -413,9 +415,9 @@ def do_get_arch(kallsyms, vmlinux):
         vmlen  = len(vmlinux) - len(vmlinux)%8
         addr_base = 0xffffff8008000000
         while offset+step < vmlen:
-          for i in xrange(offset, vmlen, step):
+          for i in range(offset, vmlen, step):
                 if INT64(i, vmlinux) < addr_base:
-                    addrnum = (i-offset)/step
+                    addrnum = (i-offset) // step
                     if addrnum > 10000:
                         return True
                     else:
@@ -432,7 +434,7 @@ def do_get_arch(kallsyms, vmlinux):
     print('[+]kallsyms_arch = ', kallsyms['arch'])
 
 def print_kallsyms(kallsyms, vmlinux):
-    buf = '\n'.join( '%x %c %s'%(kallsyms['address'][i],kallsyms['type'][i],kallsyms['name'][i]) for i in xrange(kallsyms['numsyms']) ) 
+    buf = '\n'.join( '%x %c %s'%(kallsyms['address'][i],kallsyms['type'][i],kallsyms['name'][i]) for i in range(kallsyms['numsyms']) ) 
     # open('kallsyms','w').write(buf)
     print(buf)
 
@@ -493,7 +495,7 @@ def load_file(li, neflags, format):
 
     sinittext_addr = 0
     max_sym_addr = 0
-    for i in xrange(kallsyms['numsyms']):
+    for i in range(kallsyms['numsyms']):
         if kallsyms['arch'] == 32:
             if kallsyms['address'][i] > 0xd0000000:
                 continue
@@ -510,7 +512,7 @@ def load_file(li, neflags, format):
 
 
     s = idaapi.segment_t()
-    s.bitness = kallsyms['arch'] / 32
+    s.bitness = kallsyms['arch'] // 32
     s.startEA = kallsyms['_start']
     if sinittext_addr == 0:
         s.endEA = max_sym_addr
@@ -521,13 +523,13 @@ def load_file(li, neflags, format):
     
     if sinittext_addr > 0:
         s = idaapi.segment_t()
-        s.bitness = kallsyms['arch'] / 32
+        s.bitness = kallsyms['arch'] // 32
         s.startEA = sinittext_addr
         s.endEA = max_sym_addr
         s.perm = 7
         idaapi.add_segm_ex(s,".data","DATA",idaapi.ADDSEG_OR_DIE)
 
-    for i in xrange(kallsyms['numsyms']):
+    for i in range(kallsyms['numsyms']):
         if kallsyms['type'][i] in ['t','T']:
             idaapi.add_entry(kallsyms['address'][i], kallsyms['address'][i], kallsyms['name'][i], 1)
         else:
@@ -564,7 +566,7 @@ def r2():
     r2p.cmd(seg)
 
     r2p.cmd("fs symbols")
-    for i in xrange(kallsyms['numsyms']):
+    for i in range(kallsyms['numsyms']):
         if kallsyms["address"][i] == 0:
             continue
         if kallsyms['type'][i] in ['t','T']:
