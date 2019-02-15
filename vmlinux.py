@@ -63,6 +63,14 @@ def STRIPZERO(offset, vmlinux, step=4):
         if NOTZERO(i, vmlinux):
             return i
 
+def ord_compat(ch):
+    try:
+        value = ord(ch)
+    except TypeError:
+        value = ch
+
+    return value
+
 #//////////////////////
 
 def do_token_index_table(kallsyms , offset, vmlinux):
@@ -77,7 +85,7 @@ def do_token_table(kallsyms, offset, vmlinux):
         if SHORT(i,vmlinux) == 0:
             break
     for i in range(i, len(vmlinux)):
-        if ord(vmlinux[i]):
+        if ord_compat(vmlinux[i]):
             break
     offset = i-2
 
@@ -119,7 +127,7 @@ def do_name_table(kallsyms, offset, vmlinux):
     print('[+]kallsyms_name_table = ', hex(offset))
 
     for i in range(kallsyms['numsyms']):
-        length = ord(vmlinux[offset])
+        length = ord_compat(vmlinux[offset])
         offset += length+1
     while offset%4 != 0:
         offset += 1
@@ -131,20 +139,20 @@ def do_name_table(kallsyms, offset, vmlinux):
     name_offset = 0
     for i in range(kallsyms['numsyms']):
         offset = kallsyms['name_table']+name_offset
-        length = ord(vmlinux[offset])
+        length = ord_compat(vmlinux[offset])
 
         offset += 1
         name_offset += length+1
 
         name = ''
         while length:
-            token_index_table_offset = ord(vmlinux[offset])
+            token_index_table_offset = ord_compat(vmlinux[offset])
             xoffset = kallsyms['token_index_table']+token_index_table_offset*2
             token_table_offset = SHORT(xoffset, vmlinux)
             strptr = kallsyms['token_table']+token_table_offset
 
-            while ord(vmlinux[strptr]):
-                name += '%c' % ord(vmlinux[strptr])
+            while ord_compat(vmlinux[strptr]):
+                name += '%c' % ord_compat(vmlinux[strptr])
                 strptr += 1
 
             length -= 1
@@ -170,7 +178,7 @@ def do_guess_start_address(kallsyms, vmlinux):
         
         elif kallsyms['name'][i] == 'linux_banner':
             linux_banner_addr = kallsyms['address'][i]
-            linux_banner_fileoffset = vmlinux.find('Linux version ')
+            linux_banner_fileoffset = vmlinux.find(b'Linux version ')
             if linux_banner_fileoffset:
                 _startaddr_from_banner = linux_banner_addr - linux_banner_fileoffset
 
