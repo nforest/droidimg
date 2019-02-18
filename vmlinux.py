@@ -441,7 +441,7 @@ def do_get_arch(kallsyms, vmlinux):
 
     print('[+]kallsyms_arch = ', kallsyms['arch'])
 
-def print_kallsyms(kallsyms, vmlinux):
+def print_kallsyms(kallsyms):
     buf = '\n'.join( '%x %c %s'%(kallsyms['address'][i],kallsyms['type'][i],kallsyms['name'][i]) for i in range(kallsyms['numsyms']) ) 
     # open('kallsyms','w').write(buf)
     print(buf)
@@ -489,7 +489,6 @@ def load_file(li, neflags, format):
 
     do_get_arch(kallsyms, vmlinux)
     do_kallsyms(kallsyms, vmlinux)
-    # print_kallsyms(kallsyms, vmlinux)
     
     if kallsyms['numsyms'] == 0:
         print('[!]get kallsyms error...')
@@ -557,7 +556,6 @@ def r2():
 
     do_get_arch(kallsyms, vmlinux)
     do_kallsyms(kallsyms, vmlinux)
-    # print_kallsyms(kallsyms, vmlinux)
 
     if kallsyms['numsyms'] == 0:
         print('[!]get kallsyms error...')
@@ -596,20 +594,23 @@ def help():
     print('Usage:  vmlinux.py [vmlinux image]\n')
     exit()
 
+def parse_vmlinux(filename):
+    if os.path.exists(filename):
+        vmlinux = open(filename, 'rb').read()
+        do_get_arch(kallsyms, vmlinux)
+        do_kallsyms(kallsyms, vmlinux)
+    else:
+        print('[!]vmlinux does not exist...')
+
 def main(argv):
     if len(argv)!=2:
         help()
 
-    if os.path.exists(argv[1]):
-        vmlinux = open(argv[1],'rb').read()
-        do_get_arch(kallsyms, vmlinux)
-        do_kallsyms(kallsyms, vmlinux)
-        if kallsyms['numsyms'] > 0:
-            print_kallsyms(kallsyms, vmlinux)
-        else:
-            print('[!]get kallsyms error...')
+    parse_vmlinux(argv[1])
+    if kallsyms['numsyms'] > 0:
+        print_kallsyms(kallsyms)
     else:
-        print('[!]vmlinux does not exist...')
+        print('[!]get kallsyms error...')
 
 #////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -619,5 +620,6 @@ elif radare2:
     import r2pipe
     r2()
 else:
-    main(sys.argv)
+    if __name__ == "__main__":
+        main(sys.argv)
         
