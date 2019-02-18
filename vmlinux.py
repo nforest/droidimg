@@ -33,6 +33,7 @@ kallsyms = {
             'type_table'        : 0,
             'token_table'       : 0,            
             'table_index_table' : 0,
+            'linux_banner' : "",
             }
 
 def INT(offset, vmlinux):
@@ -597,6 +598,15 @@ def help():
 def parse_vmlinux(filename):
     if os.path.exists(filename):
         vmlinux = open(filename, 'rb').read()
+
+        pat = re.compile(b"Linux version \d+\.\d+\.\d+.*")
+        matches = pat.search(vmlinux)
+        if matches is None:
+            print("[!]can't locate linux banner...")
+        else:
+            kallsyms['linux_banner'] = matches.group(0)
+            print(kallsyms['linux_banner'])
+
         do_get_arch(kallsyms, vmlinux)
         do_kallsyms(kallsyms, vmlinux)
     else:
