@@ -433,6 +433,15 @@ def do_kallsyms(kallsyms, vmlinux):
     do_name_table(kallsyms, offset, vmlinux)
     do_guess_start_address(kallsyms, vmlinux)
     print_log('[+]kallsyms_start_address = ', hex(kallsyms['_start']))
+
+    # Fix missing _text
+    if '_text' not in kallsyms['name']:
+        print_log('[+]_text missing, fix by using guessed start')
+        kallsyms['address'].insert(0, kallsyms['_start'])
+        kallsyms['type'].insert(0, 'T')
+        kallsyms['name'].insert(0, '_text')
+        kallsyms['numsyms'] += 1
+
     return
 
 def do_get_arch(kallsyms, vmlinux):
