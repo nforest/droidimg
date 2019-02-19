@@ -213,6 +213,8 @@ def do_guess_start_address(kallsyms, vmlinux):
             for i in range(0,0x100000,step):
                 _startaddr_from_processor = addr_base + i
                 fileoffset = lookup_processor_addr - _startaddr_from_processor
+                if fileoffset < 0:
+                    break
                 if fileoffset+step > len(vmlinux):
                     continue
                 if lookup_processor_addr == INT(fileoffset, vmlinux):
@@ -315,10 +317,10 @@ def do_offset_table_arm(kallsyms, start, vmlinux):
     return 0
 
 
-def do_address_table(kallsyms, offset, vmlinux):
+def do_address_table(kallsyms, offset, vmlinux, addr_base_32 = 0xC0000000):
     step = kallsyms['arch'] // 8
     if kallsyms['arch'] == 32:
-        addr_base = 0xC0000000
+        addr_base = addr_base_32
     else:
         addr_base = 0xffffff8008000000
 
@@ -352,6 +354,19 @@ def do_kallsyms(kallsyms, vmlinux):
             break
         else:
             offset += (num+1)*step
+
+    # 2G/2G kernel
+    if kallsyms['numsyms'] == 0 and kallsyms['arch'] == 32:
+        print_log('[!]could be 2G/2G kernel...')
+        offset = 0
+        step = 4
+        while offset+step < vmlen:
+            num = do_address_table(kallsyms, offset, vmlinux, addr_base_32 = 0x80000000)
+            if num > min_numsyms:
+                kallsyms['numsyms'] = num
+                break
+            else:
+                offset += (num+1)*step
 
     if kallsyms['numsyms'] == 0:
         print_log('[!]could be offset table...')
