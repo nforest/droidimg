@@ -595,7 +595,7 @@ def r2():
     r2p = r2pipe.open()
     info = r2p.cmdj("ij")
     with open(info["core"]["file"], 'rb') as f:
-            vmlinux = f.read()
+        vmlinux = f.read()
 
     do_get_arch(kallsyms, vmlinux)
     do_kallsyms(kallsyms, vmlinux)
