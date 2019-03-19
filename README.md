@@ -23,6 +23,8 @@
 
 	python ./vmlinux.py ./test/pixel_vmlinux
 
+	Use -j/--json to produce json output, which can be consumed by other components
+
 ## KASLR
 
 In some cases, kernel image with KASLR enabled will populate relocation entries upon boot and leave them as 0 in image. fix_kaslr_arm64.c and fix_kaslr_samsung.c can fix these images by re-populating relocation entries with their original addresses.

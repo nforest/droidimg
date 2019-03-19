@@ -8,6 +8,9 @@ import sys
 import time
 import struct
 
+import json
+import argparse
+
 from builtins import range
 
 #////////////////////////////////////////////////////////////////////////////////////////////
@@ -489,6 +492,14 @@ def print_kallsyms(kallsyms):
     # open('kallsyms','w').write(buf)
     print_sym(buf)
 
+def print_kallsyms_json(kallsyms):
+    try:
+        kallsyms['linux_banner'] = str(kallsyms['linux_banner'], 'utf-8')
+    except:
+        pass
+    kallsyms_json = json.dumps(kallsyms)
+    print_sym(kallsyms_json)
+
 #////////////////////////////////////////////////////////////////////////////////////////////
 # IDA Pro Plugin Support
 
@@ -595,7 +606,7 @@ def r2():
     r2p = r2pipe.open()
     info = r2p.cmdj("ij")
     with open(info["core"]["file"], 'rb') as f:
-            vmlinux = f.read()
+        vmlinux = f.read()
 
     do_get_arch(kallsyms, vmlinux)
     do_kallsyms(kallsyms, vmlinux)
@@ -633,10 +644,6 @@ def r2():
 
 #////////////////////////////////////////////////////////////////////////////////////////////
 
-def help():
-    print_log('Usage:  vmlinux.py [vmlinux image]\n')
-    exit()
-
 def parse_vmlinux(filename, log=None, sym=None):
     global log_file
     global sym_file
@@ -661,12 +668,20 @@ def parse_vmlinux(filename, log=None, sym=None):
         print_log('[!]vmlinux does not exist...')
 
 def main(argv):
-    if len(argv)!=2:
-        help()
+    global args
 
-    parse_vmlinux(argv[1], sys.stderr, sys.stdout)
+    parser = argparse.ArgumentParser()
+    parser.add_argument("-j", "--json", help="output in json, which can be consumed by other systems", action="store_true")
+    parser.add_argument("image", help="kernel image filename", type=str)
+
+    args = parser.parse_args()
+
+    parse_vmlinux(args.image, sys.stderr, sys.stdout)
     if kallsyms['numsyms'] > 0:
-        print_kallsyms(kallsyms)
+        if args.json:
+            print_kallsyms_json(kallsyms)
+        else:
+            print_kallsyms(kallsyms)
     else:
         print_log('[!]get kallsyms error...')
 
