@@ -353,10 +353,13 @@ def do_kallsyms(kallsyms, vmlinux):
     while offset+step < vmlen:
         num = do_address_table(kallsyms, offset, vmlinux)
         if num > min_numsyms:
-            kallsyms['numsyms'] = num
-            break
-        else:
-            offset += (num+1)*step
+            if (kallsyms['arch'] == 32) or \
+            (kallsyms['address'][0] // 0x100000000 == 0xffffffc0 or \
+            kallsyms['address'][0] // 0x100000000 == 0xffffff80):
+                kallsyms['numsyms'] = num
+                break
+
+        offset += (num+1)*step
 
     # 2G/2G kernel
     if kallsyms['numsyms'] == 0 and kallsyms['arch'] == 32:
