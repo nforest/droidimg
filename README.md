@@ -8,6 +8,27 @@
 
 	./imgtool pixel_boot.img extract
 	lz4 -d extracted/kernel ./pixel_vmlinux
+
+## is this file a valid vmlinux image?
+
+Droidimg is designed for **modern** Linux kernels on Android devices. Since then, it support 3.4+ kernel in arm or arm64 architecture. To quickly determine if you have a valid vmlinux image:
+
+1. Try strings and grep:
+
+```
+strings vmlinux | grep "Linux version "
+```
+
+If there is no output like this linux banner string, then you don't have a valid vmlinux file. Extracting vmlinux can be complex on some devices, search XDA for guidance.
+
+```
+Linux version 4.9.17-g8ab68b3b (ubuntu@A7Linux) (gcc version 4.9.x 20150123 (prerelease) (GCC) ) #1 SMP PREEMPT Sat Jan 12 15:51:20 CST 2019
+```
+
+2. If the script failed to determine the architecture, most likely the architecture is unsupported.
+
+3. Some boot image with UNCOMPRESSED kernel has a 20 bytes header in front of kernel text. Strip it and try again.
+
 	
 ## usage
 
