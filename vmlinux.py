@@ -439,7 +439,7 @@ def do_kallsyms(kallsyms, vmlinux):
     offset += step
 
 
-    print_log('[+]kallsyms_num = ', kallsyms['numsyms'], num)
+    print_log('[+]kallsyms_num = ', kallsyms['numsyms'], ' (', num, ')')
     if abs(num-kallsyms['numsyms']) > 128:
             kallsyms['numsyms'] = 0
             print_log('  [!]not equal, maybe error...'    )
