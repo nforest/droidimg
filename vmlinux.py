@@ -188,6 +188,7 @@ def do_name_table(kallsyms, offset, vmlinux):
             kallsyms['name'].append(name[1:])
 
 def do_guess_start_address(kallsyms, vmlinux): 
+    _startaddr_from_enable_mmu = 0
     _startaddr_from_xstext = 0
     _startaddr_from_banner = 0
     _startaddr_from_processor = 0
@@ -197,11 +198,27 @@ def do_guess_start_address(kallsyms, vmlinux):
             if hex(kallsyms['address'][i]):
                 if _startaddr_from_xstext==0 or kallsyms['address'][i]<_startaddr_from_xstext:
                     _startaddr_from_xstext = kallsyms['address'][i]
-        
+
+        elif kallsyms['name'][i] == '__enable_mmu':
+            if kallsyms['arch'] == 64:
+                enable_mmu_addr = kallsyms['address'][i]
+
+                '''
+                msr ttbr0_el1, x25          // load TTBR0
+                msr ttbr1_el1, x26          // load TTBR1
+                '''
+                enable_mmu_fileoffset = vmlinux.find(b'\x19\x20\x18\xd5\x3a\x20\x18\xd5')
+
+                if enable_mmu_fileoffset != -1:
+                    _startaddr_from_enable_mmu = enable_mmu_addr - enable_mmu_fileoffset + 0x40
+                    _startaddr_from_enable_mmu = _startaddr_from_enable_mmu & 0xfffffffffffff000
+                # print_log('_startaddr_from_enable_mmu = %s' % (hex(_startaddr_from_enable_mmu)))
+
+
         elif kallsyms['name'][i] == 'linux_banner':
             linux_banner_addr = kallsyms['address'][i]
             linux_banner_fileoffset = vmlinux.find(b'Linux version ')
-            if linux_banner_fileoffset:
+            if linux_banner_fileoffset != -1:
                 _startaddr_from_banner = linux_banner_addr - linux_banner_fileoffset
 
         elif kallsyms['name'][i] == '__lookup_processor_type_data':
@@ -226,16 +243,14 @@ def do_guess_start_address(kallsyms, vmlinux):
             if _startaddr_from_processor == _startaddr_from_processor+0x100000:
                 _startaddr_from_processor = 0
 
-    start_addrs = [_startaddr_from_banner, _startaddr_from_processor, _startaddr_from_xstext]
+    start_addrs = [_startaddr_from_banner, _startaddr_from_enable_mmu, _startaddr_from_processor, _startaddr_from_xstext]
     if kallsyms['arch']==64 and _startaddr_from_banner!=_startaddr_from_xstext:
          start_addrs.append( 0xffffff8008000000 + INT(8, vmlinux) )
 
-    # print_log('[+]kallsyms_guess_start_addresses = ',  hex(0xffffff8008000000 + INT(8, vmlinux)) if kallsyms['arch']==64 else '', hex(_startaddr_from_banner), hex(_startaddr_from_processor), hex(_startaddr_from_xstext))
-    
     for addr in start_addrs:
-        if kallsyms['arch'] == 64:
-            addr = addr & 0xffffffffffff0000
         if addr != 0 and addr % 0x1000 == 0:
+            if kallsyms['arch'] == 64 and addr < 0xffff000000000000:
+                continue
             kallsyms['_start']= addr
             break
     else:
