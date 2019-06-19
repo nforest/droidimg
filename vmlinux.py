@@ -480,6 +480,21 @@ def do_kallsyms(kallsyms, vmlinux):
         kallsyms['name'].insert(0, '_text')
         kallsyms['numsyms'] += 1
 
+    # fix missing vermagic
+    if 'vermagic' not in kallsyms['name']:
+        if kallsyms['arch'] == 64:
+            pattern = b'(\\d+\\.\\d+\\.\\d+(\\S+)? SMP preempt [a-zA-Z_ ]*aarch64)'
+            match = re.search(pattern, vmlinux)
+            if match is None:
+                pass
+            else:
+                sym_addr = kallsyms['_start'] + match.start()
+                kallsyms['address'].append(sym_addr)
+                kallsyms['type'].append('r')
+                kallsyms['name'].append('vermagic')
+                kallsyms['numsyms'] += 1
+                print_log('[!]no vermagic symbol, found @ %s' % (hex(sym_addr)))
+
     return
 
 def do_get_arch(kallsyms, vmlinux):
