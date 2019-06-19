@@ -7,6 +7,7 @@ import re
 import sys
 import time
 import struct
+import bisect
 
 import json
 import argparse
@@ -489,10 +490,13 @@ def do_kallsyms(kallsyms, vmlinux):
                 pass
             else:
                 sym_addr = kallsyms['_start'] + match.start()
-                kallsyms['address'].append(sym_addr)
-                kallsyms['type'].append('r')
-                kallsyms['name'].append('vermagic')
+
+                idx = bisect.bisect_right(kallsyms['address'], sym_addr)
+                kallsyms['address'].insert(idx, sym_addr)
+                kallsyms['type'].insert(idx, 'r')
+                kallsyms['name'].insert(idx, 'vermagic')
                 kallsyms['numsyms'] += 1
+
                 print_log('[!]no vermagic symbol, found @ %s' % (hex(sym_addr)))
 
     return
