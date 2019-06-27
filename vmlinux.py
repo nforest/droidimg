@@ -12,7 +12,11 @@ import bisect
 import json
 import argparse
 
+import simeng_miasm
+
 from builtins import range
+
+from print import log_file, sym_file, print_log, print_sym
 
 #////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -22,6 +26,8 @@ except:
     idaapi = None
 
 radare2 = True if 'R2PIPE_IN' in os.environ else False
+
+args = None
 
 
 #////////////////////////////////////////////////////////////////////////////////////////////
@@ -40,23 +46,6 @@ kallsyms = {
             'table_index_table' : 0,
             'linux_banner' : "",
             }
-
-log_file = sys.stderr
-sym_file = sys.stdout
-
-def print_log(*args):
-    global log_file
-
-    if log_file is None:
-        return
-    print("".join(map(str,args)), file=log_file)
-
-def print_sym(*args):
-    global sym_file
-
-    if sym_file is None:
-        return
-    print("".join(map(str,args)), file=sym_file)
 
 def INT(offset, vmlinux):
     bytes = kallsyms['arch'] // 8
@@ -366,6 +355,40 @@ def insert_symbol(name, addr, sym_type):
     kallsyms['name'].insert(idx, name)
     kallsyms['numsyms'] += 1
 
+def check_miasm_symbols(vmlinux):
+    global args
+
+    if not args.miasm:
+        return
+
+    print_log('[+]miasm features (experimental) enabled')
+    print_log('[+]init miasm engine...')
+
+    simeng_miasm.load_vmlinux(kallsyms, vmlinux)
+
+    # selinux_enforcing
+    if 'selinux_enforcing' not in kallsyms['name'] or True:
+        print_log('[+]selinux_enforcing not found, using miasm to locate it')
+        if 'enforcing_setup' not in kallsyms['name']:
+            print_log('[!]enforcing setup not found')
+        else:
+            simeng_miasm.set_mem(0x10000000, b'1\x00')
+            call_args = {}
+            call_args['X0'] = 0x10000000
+
+            loc_selinux_enforcing = 0
+            for access in simeng_miasm.get_mem_access(kallsyms, 'enforcing_setup', call_args):
+                # print_log("%s , %s, %d" % (access['dir'], hex(access['addr']), access['len']))
+                if access['dir'] == 'write' and access['len'] == 4:
+                    loc_selinux_enforcing = access['addr']
+                    break
+
+            if loc_selinux_enforcing > 0:
+                print_log("[+]found selinux_enforcing @ %s" % (hex(loc_selinux_enforcing)))
+
+        pass
+
+
 def do_kallsyms(kallsyms, vmlinux):
     step = kallsyms['arch'] // 8
     min_numsyms = 20000
@@ -499,6 +522,8 @@ def do_kallsyms(kallsyms, vmlinux):
                 sym_addr = kallsyms['_start'] + match.start()
                 insert_symbol('vermagic', sym_addr, 'r')
                 print_log('[!]no vermagic symbol, found @ %s' % (hex(sym_addr)))
+
+    check_miasm_symbols(vmlinux)
 
     return
 
@@ -712,6 +737,7 @@ def main(argv):
 
     parser = argparse.ArgumentParser()
     parser.add_argument("-j", "--json", help="output in json, which can be consumed by other systems", action="store_true")
+    parser.add_argument("-m", "--miasm", help="enable miasm simulation engine for non-exported symbols (experimental)", action="store_true")
     parser.add_argument("image", help="kernel image filename", type=str)
 
     args = parser.parse_args()
