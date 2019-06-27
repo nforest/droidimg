@@ -155,6 +155,7 @@ def get_mem_access(kallsyms, sym_name, args):
     global g_code_size
     global g_jitter
     global g_cpu
+    global g_mem_access
 
     # Assuming the symbol is there
     sym_idx = kallsyms['name'].index(sym_name)
@@ -218,6 +219,8 @@ def get_mem_access(kallsyms, sym_name, args):
         g_jitter.cpu.LR = 0xdead0000
     elif g_cpu == 'aarch64l':
         g_jitter.cpu.LR = 0xdead0000
+
+    g_mem_access = {}
 
     g_jitter.init_run(sym_addr)
     try:
@@ -572,7 +575,7 @@ def check_miasm_symbols(vmlinux):
     miasm_load_vmlinux(kallsyms, vmlinux)
 
     # selinux_enforcing
-    if 'selinux_enforcing' not in kallsyms['name'] or True:
+    if 'selinux_enforcing' not in kallsyms['name']:
         print_log('[+]selinux_enforcing not found, using miasm to locate it')
         if 'enforcing_setup' not in kallsyms['name']:
             print_log('[!]enforcing setup not found')
@@ -593,6 +596,8 @@ def check_miasm_symbols(vmlinux):
 
             if loc_selinux_enforcing > 0:
                 print_log("[+]found selinux_enforcing @ %s" % (hex(loc_selinux_enforcing)))
+                if loc_selinux_enforcing > kallsyms['_start']:
+                    insert_symbol('selinux_enforcing', loc_selinux_enforcing, 'B')
 
         pass
 
