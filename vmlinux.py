@@ -374,7 +374,10 @@ def check_miasm_symbols(vmlinux):
         else:
             simeng_miasm.set_mem(0x10000000, b'1\x00')
             call_args = {}
-            call_args['X0'] = 0x10000000
+            if kallsyms['arch'] == 64:
+                call_args['X0'] = 0x10000000
+            elif kallsyms['arch'] == 32:
+                call_args['R0'] = 0x10000000
 
             loc_selinux_enforcing = 0
             for access in simeng_miasm.get_mem_access(kallsyms, 'enforcing_setup', call_args):
