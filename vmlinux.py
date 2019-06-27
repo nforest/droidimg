@@ -359,6 +359,13 @@ def do_address_table(kallsyms, offset, vmlinux, addr_base_32 = 0xC0000000):
 
     return 0
 
+def insert_symbol(name, addr, sym_type):
+    idx = bisect.bisect_right(kallsyms['address'], addr)
+    kallsyms['address'].insert(idx, addr)
+    kallsyms['type'].insert(idx, sym_type)
+    kallsyms['name'].insert(idx, name)
+    kallsyms['numsyms'] += 1
+
 def do_kallsyms(kallsyms, vmlinux):
     step = kallsyms['arch'] // 8
     min_numsyms = 20000
@@ -490,13 +497,7 @@ def do_kallsyms(kallsyms, vmlinux):
                 pass
             else:
                 sym_addr = kallsyms['_start'] + match.start()
-
-                idx = bisect.bisect_right(kallsyms['address'], sym_addr)
-                kallsyms['address'].insert(idx, sym_addr)
-                kallsyms['type'].insert(idx, 'r')
-                kallsyms['name'].insert(idx, 'vermagic')
-                kallsyms['numsyms'] += 1
-
+                insert_symbol('vermagic', sym_addr, 'r')
                 print_log('[!]no vermagic symbol, found @ %s' % (hex(sym_addr)))
 
     return
