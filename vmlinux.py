@@ -126,9 +126,6 @@ def miasm_load_vmlinux(kallsyms, vmlinux):
     end_addr = start_addr + g_code_size
     print_log("[+]mapping %s - %s" % (hex(start_addr), hex(end_addr)))
 
-    # while start_addr < end_addr:
-    #     g_jitter.vm.add_memory_page(start_addr, PAGE_READ|PAGE_WRITE, b"\x00"*0x1000, "code page")
-    #     start_addr = start_addr + 0x1000
     g_jitter.vm.add_memory_page(start_addr, PAGE_READ|PAGE_WRITE, b"\x00"*g_code_size, "code page")
 
     g_jitter.vm.set_mem(kallsyms['_start'], vmlinux)
