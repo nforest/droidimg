@@ -742,6 +742,17 @@ def do_kallsyms(kallsyms, vmlinux):
                 insert_symbol('vermagic', sym_addr, 'r')
                 print_log('[!]no vermagic symbol, found @ %s' % (hex(sym_addr)))
 
+    # fix missing linux_banner
+    if 'linux_banner' not in kallsyms['name']:
+        pattern = b'Linux version \\d+\\.\\d+\\.\\d+'
+        match = re.search(pattern, vmlinux)
+        if match is None:
+            pass
+        else:
+            sym_addr = kallsyms['_start'] + match.start()
+            insert_symbol('linux_banner', sym_addr, 'B')
+            print_log('[!]no linux_banner symbol, found @ %s' % (hex(sym_addr)))
+
     check_miasm_symbols(vmlinux)
 
     return
