@@ -126,15 +126,15 @@ def miasm_load_vmlinux(kallsyms, vmlinux):
     end_addr = start_addr + g_code_size
     print_log("[+]mapping %s - %s" % (hex(start_addr), hex(end_addr)))
 
-    while start_addr < end_addr:
-        g_jitter.vm.add_memory_page(start_addr, PAGE_READ|PAGE_WRITE, b"\x00"*0x1000, "code page")
-        start_addr = start_addr + 0x1000
+    # while start_addr < end_addr:
+    #     g_jitter.vm.add_memory_page(start_addr, PAGE_READ|PAGE_WRITE, b"\x00"*0x1000, "code page")
+    #     start_addr = start_addr + 0x1000
+    g_jitter.vm.add_memory_page(start_addr, PAGE_READ|PAGE_WRITE, b"\x00"*g_code_size, "code page")
 
     g_jitter.vm.set_mem(kallsyms['_start'], vmlinux)
 
     # stack
-    g_jitter.vm.add_memory_page(0xdead1000, PAGE_READ|PAGE_WRITE, b"\x00"*0x1000, "stack")
-    g_jitter.vm.add_memory_page(0xdead2000, PAGE_READ|PAGE_WRITE, b"\x00"*0x1000, "stack")
+    g_jitter.vm.add_memory_page(0xdead1000, PAGE_READ|PAGE_WRITE, b"\x00"*0x2000, "stack")
 
 
 def miasm_set_mem(addr, body):
@@ -143,7 +143,16 @@ def miasm_set_mem(addr, body):
 
     assert(len(body) <= 4096)
 
-    if addr not in g_jitter.vm.get_all_memory().keys():
+    all_mem = g_jitter.vm.get_all_memory()
+    is_mapped = False
+
+    for start in all_mem.keys():
+        # print_log("%s: %d" % (hex(addr), all_mem[addr]['size']))
+        if addr >= start and addr < (start + all_mem[start]['size']):
+            is_mapped = True
+            break
+
+    if not is_mapped:
         g_jitter.vm.add_memory_page(addr, PAGE_READ|PAGE_WRITE, b"\x00"*0x1000, "data")
 
     print_log('[+]set memory content @ %s' % (hex(addr)))
