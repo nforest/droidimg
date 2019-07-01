@@ -110,9 +110,9 @@ def miasm_load_vmlinux(kallsyms, vmlinux):
     global g_jitter
     global g_cpu
 
-    if kallsyms['arch'] == 32:
+    if kallsyms['arch'] == 'arm':
         g_cpu = "arml"
-    elif kallsyms['arch'] == 64:
+    elif kallsyms['arch'] == 'arm64':
         g_cpu = "aarch64l"
     else:
         raise Exception('Invalid arch')
@@ -244,7 +244,8 @@ def get_mem_access(kallsyms, sym_name, args):
 
 
 kallsyms = {
-            'arch'          :0,
+            'arch'          :'',
+            'ptr_size'      :0,
             '_start'        :0,
             'numsyms'        :0,
             'address'       :[],
@@ -259,7 +260,7 @@ kallsyms = {
             }
 
 def INT(offset, vmlinux):
-    bytes = kallsyms['arch'] // 8
+    bytes = kallsyms['ptr_size'] // 8
     s = vmlinux[offset:offset+bytes]
     f = 'I' if bytes==4 else 'Q'
     (num,) = struct.unpack(f, s)
@@ -318,7 +319,7 @@ def do_marker_table(kallsyms, offset, vmlinux):
     kallsyms['marker_table'] = offset   
     print_log('[+]kallsyms_marker_table = ', hex(offset))
 
-    offset += (((kallsyms['numsyms']-1)>>8)+1)*(kallsyms['arch'] // 8)
+    offset += (((kallsyms['numsyms']-1)>>8)+1)*(kallsyms['ptr_size'] // 8)
     offset = STRIPZERO(offset, vmlinux)
 
     do_token_table(kallsyms, offset, vmlinux)
@@ -335,14 +336,14 @@ def do_type_table(kallsyms, offset, vmlinux):
         kallsyms['type_table'] = offset
 
         while INT(offset, vmlinux):
-            offset += (kallsyms['arch'] // 8)
+            offset += (kallsyms['ptr_size'] // 8)
         offset = STRIPZERO(offset, vmlinux)
     else:
         kallsyms['type_table'] = 0
     
     print_log('[+]kallsyms_type_table = ', hex(kallsyms['type_table']))
 
-    offset -= (kallsyms['arch'] // 8)
+    offset -= (kallsyms['ptr_size'] // 8)
     do_marker_table(kallsyms, offset, vmlinux)
             
 def do_name_table(kallsyms, offset, vmlinux):
@@ -401,7 +402,7 @@ def do_guess_start_address(kallsyms, vmlinux):
                     _startaddr_from_xstext = kallsyms['address'][i]
 
         elif kallsyms['name'][i] == '__enable_mmu':
-            if kallsyms['arch'] == 64:
+            if kallsyms['arch'] == 'arm64':
                 enable_mmu_addr = kallsyms['address'][i]
 
                 '''
@@ -425,8 +426,8 @@ def do_guess_start_address(kallsyms, vmlinux):
         elif kallsyms['name'][i] == '__lookup_processor_type_data':
             lookup_processor_addr = kallsyms['address'][i]
 
-            step = kallsyms['arch'] // 8
-            if kallsyms['arch'] == 32:
+            step = kallsyms['ptr_size'] // 8
+            if kallsyms['arch'] == 'arm':
                 addr_base = 0xC0008000
             else:
                 addr_base = 0xffffff8008080000
@@ -450,7 +451,7 @@ def do_guess_start_address(kallsyms, vmlinux):
 
     for addr in start_addrs:
         if addr != 0 and addr % 0x1000 == 0:
-            if kallsyms['arch'] == 64 and addr < 0xffff000000000000:
+            if kallsyms['arch'] == 'arm64' and addr < 0xffff000000000000:
                 continue
             kallsyms['_start']= addr
             break
@@ -539,8 +540,8 @@ def do_offset_table_arm(kallsyms, start, vmlinux):
 
 
 def do_address_table(kallsyms, offset, vmlinux, addr_base_32 = 0xC0000000):
-    step = kallsyms['arch'] // 8
-    if kallsyms['arch'] == 32:
+    step = kallsyms['ptr_size'] // 8
+    if kallsyms['arch'] == 'arm':
         addr_base = addr_base_32
     else:
         addr_base = 0xffffff8008000000
@@ -589,9 +590,9 @@ def check_miasm_symbols(vmlinux):
         else:
             miasm_set_mem(0x10000000, b'1\x00')
             call_args = {}
-            if kallsyms['arch'] == 64:
+            if kallsyms['arch'] == 'arm64':
                 call_args['X0'] = 0x10000000
-            elif kallsyms['arch'] == 32:
+            elif kallsyms['arch'] == 'arm':
                 call_args['R0'] = 0x10000000
 
             loc_selinux_enforcing = 0
@@ -610,7 +611,7 @@ def check_miasm_symbols(vmlinux):
 
 
 def do_kallsyms(kallsyms, vmlinux):
-    step = kallsyms['arch'] // 8
+    step = kallsyms['ptr_size'] // 8
     min_numsyms = 20000
 
     offset = 0
@@ -621,7 +622,7 @@ def do_kallsyms(kallsyms, vmlinux):
     while offset+step < vmlen:
         num = do_address_table(kallsyms, offset, vmlinux)
         if num > min_numsyms:
-            if (kallsyms['arch'] == 32) or \
+            if (kallsyms['arch'] == 'arm') or \
             (kallsyms['address'][0] // 0x100000000 == 0xffffffc0 or \
             kallsyms['address'][0] // 0x100000000 == 0xffffff80):
                 kallsyms['numsyms'] = num
@@ -630,7 +631,7 @@ def do_kallsyms(kallsyms, vmlinux):
         offset += (num+1)*step
 
     # 2G/2G kernel
-    if kallsyms['numsyms'] == 0 and kallsyms['arch'] == 32:
+    if kallsyms['numsyms'] == 0 and kallsyms['arch'] == 'arm':
         print_log('[!]could be 2G/2G kernel...')
         offset = 0
         step = 4
@@ -661,7 +662,7 @@ def do_kallsyms(kallsyms, vmlinux):
 
         # For some aarch32 kernels, kallsyms_offset beign with 0xf8000
         if kallsyms['numsyms'] == 0 and \
-            kallsyms['arch'] == 32:
+            kallsyms['arch'] == 'arm':
             offset = 0
             while offset+step < vmlen:
                 num = do_offset_table_arm(kallsyms, offset, vmlinux)
@@ -676,7 +677,7 @@ def do_kallsyms(kallsyms, vmlinux):
                         offset += step
 
 
-        step = kallsyms['arch'] // 8 # recover normal step
+        step = kallsyms['ptr_size'] // 8 # recover normal step
 
 
     if kallsyms['numsyms'] == 0:
@@ -733,7 +734,7 @@ def do_kallsyms(kallsyms, vmlinux):
 
     # fix missing vermagic
     if 'vermagic' not in kallsyms['name']:
-        if kallsyms['arch'] == 64:
+        if kallsyms['arch'] == 'arm64':
             pattern = b'(\\d+\\.\\d+\\.\\d+(\\S+)? SMP preempt [a-zA-Z_ ]*aarch64)'
             match = re.search(pattern, vmlinux)
             if match is None:
@@ -775,11 +776,14 @@ def do_get_arch(kallsyms, vmlinux):
         return False
 
     if re.search(b'ARMd', vmlinux[:0x200]):
-        kallsyms['arch'] = 64
+        kallsyms['arch'] = 'arm64'
+        kallsyms['ptr_size'] = 64
     elif fuzzy_arm64(vmlinux):
-        kallsyms['arch'] = 64
+        kallsyms['arch'] = 'arm64'
+        kallsyms['ptr_size'] = 64
     else:
-        kallsyms['arch'] = 32
+        kallsyms['arch'] = 'arm'
+        kallsyms['ptr_size'] = 32
 
     print_log('[+]kallsyms_arch = ', kallsyms['arch'])
 
@@ -845,7 +849,7 @@ def load_file(li, neflags, format):
         return 0
     
     idaapi.set_processor_type("arm", idaapi.SETPROC_ALL|idaapi.SETPROC_FATAL)
-    if kallsyms['arch'] == 64:
+    if kallsyms['arch'] == 'arm64':
         idaapi.get_inf_structure().lflags |= idaapi.LFLG_64BIT
 
     li.file2base(0, kallsyms['_start'], kallsyms['_start']+li.size(), True)
@@ -853,7 +857,7 @@ def load_file(li, neflags, format):
     sinittext_addr = 0
     max_sym_addr = 0
     for i in range(kallsyms['numsyms']):
-        if kallsyms['arch'] == 32:
+        if kallsyms['arch'] == 'arm':
             if kallsyms['address'][i] > 0xd0000000:
                 continue
 
@@ -869,7 +873,7 @@ def load_file(li, neflags, format):
 
 
     s = idaapi.segment_t()
-    s.bitness = kallsyms['arch'] // 32
+    s.bitness = kallsyms['ptr_size'] // 32
     s.startEA = kallsyms['_start']
     if sinittext_addr == 0:
         s.endEA = max_sym_addr
@@ -880,7 +884,7 @@ def load_file(li, neflags, format):
     
     if sinittext_addr > 0:
         s = idaapi.segment_t()
-        s.bitness = kallsyms['arch'] // 32
+        s.bitness = kallsyms['ptr_size'] // 32
         s.startEA = sinittext_addr
         s.endEA = max_sym_addr
         s.perm = 7
