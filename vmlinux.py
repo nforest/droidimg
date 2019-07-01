@@ -570,7 +570,8 @@ def check_miasm_symbols(vmlinux):
     global args
 
     if args is None:
-        pass
+        # Most likely laoded in IDA or r2. For now just disable experimental features.
+        return
     else:
         if (not miasm_installed) or (not args.miasm):
             return
