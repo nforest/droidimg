@@ -23,24 +23,12 @@ except:
 
 radare2 = True if 'R2PIPE_IN' in os.environ else False
 
+args = None
 
 #////////////////////////////////////////////////////////////////////////////////////////////
 
-kallsyms = {
-            'arch'          :0,
-            '_start'        :0,
-            'numsyms'        :0,
-            'address'       :[],
-            'type'          :[],
-            'name'          :[],
-            'address_table'     : 0,
-            'name_table'        : 0,
-            'type_table'        : 0,
-            'token_table'       : 0,            
-            'table_index_table' : 0,
-            'linux_banner' : "",
-            }
 
+#//////PRINTING BEGIN//////
 log_file = sys.stderr
 sym_file = sys.stdout
 
@@ -57,6 +45,218 @@ def print_sym(*args):
     if sym_file is None:
         return
     print("".join(map(str,args)), file=sym_file)
+#//////PRINTING END//////
+
+#//////SIMENG_MIASM BEGIN//////
+miasm_installed = True
+
+try:
+    from miasm.core.utils import decode_hex
+    from miasm.analysis.machine import Machine
+    from miasm.jitter.csts import PAGE_READ, PAGE_WRITE, \
+        EXCEPT_BREAKPOINT_MEMORY, EXCEPT_ACCESS_VIOL
+except ImportError:
+    miasm_installed = False
+
+g_machine = None
+g_code_size = 0
+g_jitter = None
+g_cpu = None
+
+g_mem_access = {}
+
+
+# Handler
+def mem_breakpoint_handler(jitter):
+    print_log("======")
+    print_log("Data access caught!")
+
+    mem_r = jitter.vm.get_memory_read()
+    if len(mem_r) > 0:
+        for s, e in mem_r:
+            print_log("%s - %s" % (hex(s), hex(e - s)))
+            g_mem_access[jitter.pc] = {}
+            g_mem_access[jitter.pc]['dir'] = 'read'
+            g_mem_access[jitter.pc]['addr'] = s
+            g_mem_access[jitter.pc]['len'] = e - s
+    else:
+        print_log("No read")
+
+    mem_w = jitter.vm.get_memory_write()
+    if len(mem_w) > 0:
+        for s, e in mem_w:
+            print_log("%s - %s" % (hex(s), hex(e - s)))
+            g_mem_access[jitter.pc] = {}
+            g_mem_access[jitter.pc]['dir'] = 'write'
+            g_mem_access[jitter.pc]['addr'] = s
+            g_mem_access[jitter.pc]['len'] = e - s
+    else:
+        print_log("No write")
+
+    print_log("pc = %s" % (hex(jitter.cpu.PC)))
+    print_log("[DBG] vm.exception = %d" % (jitter.vm.get_exception()))
+    print_log("======")
+
+    # Cleanup? shouldn't be necessary
+    jitter.vm.set_exception(0)
+    jitter.vm.reset_memory_access()
+
+    return True
+
+
+def miasm_load_vmlinux(kallsyms, vmlinux):
+    global g_machine
+    global g_code_size
+    global g_jitter
+    global g_cpu
+
+    if kallsyms['arch'] == 32:
+        g_cpu = "arml"
+    elif kallsyms['arch'] == 64:
+        g_cpu = "aarch64l"
+    else:
+        raise Exception('Invalid arch')
+
+    g_machine = Machine(g_cpu)
+    g_jitter = g_machine.jitter('gcc')
+
+    start_addr = kallsyms['_start']
+    g_code_size = ((len(vmlinux) + 0x1000) >> 12 << 12)
+    g_code_size += 0x8000000    # bss
+    end_addr = start_addr + g_code_size
+    print_log("[+]mapping %s - %s" % (hex(start_addr), hex(end_addr)))
+
+    g_jitter.vm.add_memory_page(start_addr, PAGE_READ|PAGE_WRITE, b"\x00"*g_code_size, "code page")
+
+    g_jitter.vm.set_mem(kallsyms['_start'], vmlinux)
+
+    # stack
+    g_jitter.vm.add_memory_page(0xdead1000, PAGE_READ|PAGE_WRITE, b"\x00"*0x2000, "stack")
+
+
+def miasm_set_mem(addr, body):
+    global g_machine
+    global g_jitter
+
+    assert(len(body) <= 4096)
+
+    all_mem = g_jitter.vm.get_all_memory()
+    is_mapped = False
+
+    for start in all_mem.keys():
+        # print_log("%s: %d" % (hex(addr), all_mem[addr]['size']))
+        if addr >= start and addr < (start + all_mem[start]['size']):
+            is_mapped = True
+            break
+
+    if not is_mapped:
+        g_jitter.vm.add_memory_page(addr, PAGE_READ|PAGE_WRITE, b"\x00"*0x1000, "data")
+
+    print_log('[+]set memory content @ %s' % (hex(addr)))
+    g_jitter.vm.set_mem(addr, body)
+
+
+def get_mem_access(kallsyms, sym_name, args):
+    global g_machine
+    global g_code_size
+    global g_jitter
+    global g_cpu
+    global g_mem_access
+
+    # Assuming the symbol is there
+    sym_idx = kallsyms['name'].index(sym_name)
+    sym_addr = kallsyms['address'][sym_idx]
+    sym_size = kallsyms['address'][sym_idx + 1] - sym_addr
+    if sym_size <= 0:
+        raise Exception('Invalid address table?')
+
+    # Parsing args
+    if g_cpu == 'arml':
+        for reg, value in args.items():
+            if reg == 'R0':
+                g_jitter.cpu.R0 = value
+            elif reg == 'R1':
+                g_jitter.cpu.R1 = value
+            elif reg == 'R2':
+                g_jitter.cpu.R2 = value
+            elif reg == 'R3':
+                g_jitter.cpu.R3 = value
+            elif reg == 'R4':
+                g_jitter.cpu.R4 = value
+            elif reg == 'R5':
+                g_jitter.cpu.R5 = value
+            elif reg == 'R6':
+                g_jitter.cpu.R6 = value
+            elif reg == 'R7':
+                g_jitter.cpu.R7 = value
+            g_jitter.cpu.SP = 0xdead2000
+    elif g_cpu == 'aarch64l':
+        for reg, value in args.items():
+            if reg == 'X0':
+                g_jitter.cpu.X0 = value
+            elif reg == 'X1':
+                g_jitter.cpu.X1 = value
+            elif reg == 'X2':
+                g_jitter.cpu.X2 = value
+            elif reg == 'X3':
+                g_jitter.cpu.X3 = value
+            elif reg == 'X4':
+                g_jitter.cpu.X4 = value
+            elif reg == 'X5':
+                g_jitter.cpu.X5 = value
+            elif reg == 'X6':
+                g_jitter.cpu.X6 = value
+            elif reg == 'X7':
+                g_jitter.cpu.X7 = value
+            g_jitter.cpu.SP = 0xdead2000
+    else:
+        raise Exception('Invalid arch')
+
+    bp_start = kallsyms['_start']
+    bp_size = g_code_size
+    g_jitter.exceptions_handler.callbacks[EXCEPT_BREAKPOINT_MEMORY] = []
+    g_jitter.add_exception_handler(EXCEPT_BREAKPOINT_MEMORY, mem_breakpoint_handler)
+    print_log('[+]setting up memory breakpoint in range [%s, %s]' % (hex(bp_start), hex(bp_start + bp_size)))
+    g_jitter.vm.add_memory_breakpoint(bp_start, bp_size, PAGE_READ | PAGE_WRITE)
+
+    # g_jitter.set_trace_log()
+
+    if g_cpu == 'arml':
+        g_jitter.cpu.LR = 0xdead0000
+    elif g_cpu == 'aarch64l':
+        g_jitter.cpu.LR = 0xdead0000
+
+    g_mem_access = {}
+
+    g_jitter.init_run(sym_addr)
+    try:
+        g_jitter.continue_run()
+    except AssertionError:
+        assert g_jitter.vm.get_exception() == EXCEPT_ACCESS_VIOL
+
+    g_jitter.vm.remove_memory_breakpoint(bp_start, PAGE_READ | PAGE_WRITE)
+
+    for pc in g_mem_access.keys():
+        access = g_mem_access[pc]
+        if pc > sym_addr and pc < (sym_addr + sym_size):    # we ignore the first instruction
+            yield access
+#//////SIMENG_MIASM END//////
+
+
+kallsyms = {
+            'arch'          :0,
+            '_start'        :0,
+            'numsyms'        :0,
+            'address'       :[],
+            'type'          :[],
+            'name'          :[],
+            'address_table'     : 0,
+            'name_table'        : 0,
+            'type_table'        : 0,
+            'token_table'       : 0,            
+            'table_index_table' : 0,
+            'linux_banner' : "",
+            }
 
 def INT(offset, vmlinux):
     bytes = kallsyms['arch'] // 8
@@ -359,6 +559,56 @@ def do_address_table(kallsyms, offset, vmlinux, addr_base_32 = 0xC0000000):
 
     return 0
 
+def insert_symbol(name, addr, sym_type):
+    idx = bisect.bisect_right(kallsyms['address'], addr)
+    kallsyms['address'].insert(idx, addr)
+    kallsyms['type'].insert(idx, sym_type)
+    kallsyms['name'].insert(idx, name)
+    kallsyms['numsyms'] += 1
+
+def check_miasm_symbols(vmlinux):
+    global args
+
+    if args is None:
+        # Most likely laoded in IDA or r2. For now just disable experimental features.
+        return
+    else:
+        if (not miasm_installed) or (not args.miasm):
+            return
+
+    print_log('[+]miasm features (experimental) enabled')
+    print_log('[+]init miasm engine...')
+
+    miasm_load_vmlinux(kallsyms, vmlinux)
+
+    # selinux_enforcing
+    if 'selinux_enforcing' not in kallsyms['name']:
+        print_log('[+]selinux_enforcing not found, using miasm to locate it')
+        if 'enforcing_setup' not in kallsyms['name']:
+            print_log('[!]enforcing setup not found')
+        else:
+            miasm_set_mem(0x10000000, b'1\x00')
+            call_args = {}
+            if kallsyms['arch'] == 64:
+                call_args['X0'] = 0x10000000
+            elif kallsyms['arch'] == 32:
+                call_args['R0'] = 0x10000000
+
+            loc_selinux_enforcing = 0
+            for access in get_mem_access(kallsyms, 'enforcing_setup', call_args):
+                # print_log("%s , %s, %d" % (access['dir'], hex(access['addr']), access['len']))
+                if access['dir'] == 'write' and access['len'] == 4:
+                    loc_selinux_enforcing = access['addr']
+                    break
+
+            if loc_selinux_enforcing > 0:
+                print_log("[+]found selinux_enforcing @ %s" % (hex(loc_selinux_enforcing)))
+                if loc_selinux_enforcing > kallsyms['_start']:
+                    insert_symbol('selinux_enforcing', loc_selinux_enforcing, 'B')
+
+        pass
+
+
 def do_kallsyms(kallsyms, vmlinux):
     step = kallsyms['arch'] // 8
     min_numsyms = 20000
@@ -490,14 +740,21 @@ def do_kallsyms(kallsyms, vmlinux):
                 pass
             else:
                 sym_addr = kallsyms['_start'] + match.start()
-
-                idx = bisect.bisect_right(kallsyms['address'], sym_addr)
-                kallsyms['address'].insert(idx, sym_addr)
-                kallsyms['type'].insert(idx, 'r')
-                kallsyms['name'].insert(idx, 'vermagic')
-                kallsyms['numsyms'] += 1
-
+                insert_symbol('vermagic', sym_addr, 'r')
                 print_log('[!]no vermagic symbol, found @ %s' % (hex(sym_addr)))
+
+    # fix missing linux_banner
+    if 'linux_banner' not in kallsyms['name']:
+        pattern = b'Linux version \\d+\\.\\d+\\.\\d+'
+        match = re.search(pattern, vmlinux)
+        if match is None:
+            pass
+        else:
+            sym_addr = kallsyms['_start'] + match.start()
+            insert_symbol('linux_banner', sym_addr, 'B')
+            print_log('[!]no linux_banner symbol, found @ %s' % (hex(sym_addr)))
+
+    check_miasm_symbols(vmlinux)
 
     return
 
@@ -711,6 +968,7 @@ def main(argv):
 
     parser = argparse.ArgumentParser()
     parser.add_argument("-j", "--json", help="output in json, which can be consumed by other systems", action="store_true")
+    parser.add_argument("-m", "--miasm", help="enable miasm simulation engine for non-exported symbols (experimental)", action="store_true")
     parser.add_argument("image", help="kernel image filename", type=str)
 
     args = parser.parse_args()
@@ -735,3 +993,4 @@ else:
     if __name__ == "__main__":
         main(sys.argv)
         
+
