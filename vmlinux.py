@@ -254,7 +254,7 @@ kallsyms = {
             'address_table'     : 0,
             'name_table'        : 0,
             'type_table'        : 0,
-            'token_table'       : 0,            
+            'token_table'       : 0,
             'table_index_table' : 0,
             'linux_banner' : "",
             }
@@ -279,7 +279,7 @@ def INT64(offset, vmlinux):
 def SHORT(offset, vmlinux):
     s = vmlinux[offset:offset+2]
     (num,) = struct.unpack('H', s)
-    return num  
+    return num
 
 def STRIPZERO(offset, vmlinux, step=4):
     NOTZERO = INT32 if step==4 else INT
@@ -298,11 +298,11 @@ def ord_compat(ch):
 #//////////////////////
 
 def do_token_index_table(kallsyms , offset, vmlinux):
-    kallsyms['token_index_table'] = offset  
+    kallsyms['token_index_table'] = offset
     print_log('[+]kallsyms_token_index_table = ', hex(offset))
 
 def do_token_table(kallsyms, offset, vmlinux):
-    kallsyms['token_table'] = offset    
+    kallsyms['token_table'] = offset
     print_log('[+]kallsyms_token_table = ', hex(offset))
 
     for i in range(offset,len(vmlinux)):
@@ -316,7 +316,7 @@ def do_token_table(kallsyms, offset, vmlinux):
     do_token_index_table(kallsyms , offset, vmlinux)
 
 def do_marker_table(kallsyms, offset, vmlinux):
-    kallsyms['marker_table'] = offset   
+    kallsyms['marker_table'] = offset
     print_log('[+]kallsyms_marker_table = ', hex(offset))
 
     offset += (((kallsyms['numsyms']-1)>>8)+1)*(kallsyms['ptr_size'] // 8)
@@ -340,14 +340,14 @@ def do_type_table(kallsyms, offset, vmlinux):
         offset = STRIPZERO(offset, vmlinux)
     else:
         kallsyms['type_table'] = 0
-    
+
     print_log('[+]kallsyms_type_table = ', hex(kallsyms['type_table']))
 
     offset -= (kallsyms['ptr_size'] // 8)
     do_marker_table(kallsyms, offset, vmlinux)
-            
+
 def do_name_table(kallsyms, offset, vmlinux):
-    kallsyms['name_table'] = offset 
+    kallsyms['name_table'] = offset
     print_log('[+]kallsyms_name_table = ', hex(offset))
 
     for i in range(kallsyms['numsyms']):
@@ -389,12 +389,12 @@ def do_name_table(kallsyms, offset, vmlinux):
             kallsyms['type'].append(name[0])
             kallsyms['name'].append(name[1:])
 
-def do_guess_start_address(kallsyms, vmlinux): 
+def do_guess_start_address(kallsyms, vmlinux):
     _startaddr_from_enable_mmu = 0
     _startaddr_from_xstext = 0
     _startaddr_from_banner = 0
     _startaddr_from_processor = 0
-    
+
     for i in range(kallsyms['numsyms']):
         if kallsyms['name'][i] in ['_text', 'stext', '_stext', '_sinittext', '__init_begin']:
             if hex(kallsyms['address'][i]):
@@ -431,7 +431,7 @@ def do_guess_start_address(kallsyms, vmlinux):
                 addr_base = 0xC0008000
             else:
                 addr_base = 0xffffff8008080000
-        
+
             for i in range(0,0x100000,step):
                 _startaddr_from_processor = addr_base + i
                 fileoffset = lookup_processor_addr - _startaddr_from_processor
@@ -609,6 +609,61 @@ def check_miasm_symbols(vmlinux):
 
         pass
 
+def find_sys_call_table(kallsyms, vmlinux):
+    loc_sys_call_table = 0
+    symbols = []
+
+    if kallsyms['arch'] == 'arm':
+        symbols.append('sys_restart_syscall')
+        symbols.append('sys_exit')
+        symbols.append('sys_fork')
+        symbols.append('sys_read')
+        pass
+    elif kallsyms['arch'] == 'arm64':
+        '''
+        #define __NR_io_setup 0
+        __SC_COMP(__NR_io_setup, sys_io_setup, compat_sys_io_setup)
+        #define __NR_io_destroy 1
+        __SYSCALL(__NR_io_destroy, sys_io_destroy)
+        #define __NR_io_submit 2
+        __SC_COMP(__NR_io_submit, sys_io_submit, compat_sys_io_submit)
+        #define __NR_io_cancel 3
+        __SYSCALL(__NR_io_cancel, sys_io_cancel)
+        '''
+        symbols.append('sys_io_setup')
+        symbols.append('sys_io_destroy')
+        symbols.append('sys_io_submit')
+        symbols.append('sys_io_cancel')
+        pass
+    else:
+        return
+
+    print_log('[+]looking for symbols ', symbols)
+    addr_string = b''
+
+    for sym in symbols:
+        if sym not in kallsyms['name']:
+            print_log('[!]%s not found' % (sym))
+            return
+
+        idx = kallsyms['name'].index(sym)
+
+        if kallsyms['ptr_size'] == 64:
+            addr_string = addr_string + struct.pack('<Q', kallsyms['address'][idx])
+        elif kallsyms['ptr_size'] == 32:
+            addr_string = addr_string + struct.pack('<L', kallsyms['address'][idx])
+        else:
+            raise Exception('Invalid ptr_size')
+
+    offset = vmlinux.find(addr_string)
+    if offset == -1:
+        print_log("[!]Can't find sys_call_table")
+        return
+
+    loc_sys_call_table = kallsyms['_start'] + offset
+    print_log("[+]Found sys_call_table @ %s" % (hex(loc_sys_call_table)))
+    insert_symbol('sys_call_table', loc_sys_call_table, 'R')
+
 
 def do_kallsyms(kallsyms, vmlinux):
     step = kallsyms['ptr_size'] // 8
@@ -686,7 +741,7 @@ def do_kallsyms(kallsyms, vmlinux):
 
     print_log('[+]numsyms: ', kallsyms['numsyms'])
 
-    kallsyms['address_table'] = offset  
+    kallsyms['address_table'] = offset
     print_log('[+]kallsyms_address_table = ', hex(offset))
 
     if is_offset_table == 0:
@@ -755,6 +810,10 @@ def do_kallsyms(kallsyms, vmlinux):
             insert_symbol('linux_banner', sym_addr, 'B')
             print_log('[!]no linux_banner symbol, found @ %s' % (hex(sym_addr)))
 
+    # fix missing sys_call_table
+    if 'sys_call_table' not in kallsyms['name']:
+        find_sys_call_table(kallsyms, vmlinux)
+
     check_miasm_symbols(vmlinux)
 
     return
@@ -788,7 +847,7 @@ def do_get_arch(kallsyms, vmlinux):
     print_log('[+]kallsyms_arch = ', kallsyms['arch'])
 
 def print_kallsyms(kallsyms):
-    buf = '\n'.join( '%x %c %s'%(kallsyms['address'][i],kallsyms['type'][i],kallsyms['name'][i]) for i in range(kallsyms['numsyms']) ) 
+    buf = '\n'.join( '%x %c %s'%(kallsyms['address'][i],kallsyms['type'][i],kallsyms['name'][i]) for i in range(kallsyms['numsyms']) )
     # open('kallsyms','w').write(buf)
     print_sym(buf)
 
@@ -843,11 +902,11 @@ def load_file(li, neflags, format):
 
     do_get_arch(kallsyms, vmlinux)
     do_kallsyms(kallsyms, vmlinux)
-    
+
     if kallsyms['numsyms'] == 0:
         print_log('[!]get kallsyms error...')
         return 0
-    
+
     idaapi.set_processor_type("arm", idaapi.SETPROC_ALL|idaapi.SETPROC_FATAL)
     if kallsyms['arch'] == 'arm64':
         idaapi.get_inf_structure().lflags |= idaapi.LFLG_64BIT
@@ -881,7 +940,7 @@ def load_file(li, neflags, format):
         s.endEA = sinittext_addr
     s.perm = 5
     idaapi.add_segm_ex(s,".text","CODE",idaapi.ADDSEG_OR_DIE)
-    
+
     if sinittext_addr > 0:
         s = idaapi.segment_t()
         s.bitness = kallsyms['ptr_size'] // 32
@@ -996,5 +1055,5 @@ elif radare2:
 else:
     if __name__ == "__main__":
         main(sys.argv)
-        
+
 
