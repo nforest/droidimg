@@ -46,6 +46,10 @@ Linux version 4.9.17-g8ab68b3b (ubuntu@A7Linux) (gcc version 4.9.x 20150123 (pre
 
 	Use -j/--json to produce json output, which can be consumed by other components
 
+	Use -m/--miasm to enable miasm simulation engine in case some symbols are not exported (experimental). Note that only Python 2 is supported by miasm for now.
+
+	Miasm: https://github.com/cea-sec/miasm
+
 ## KASLR
 
 In some cases, kernel image with KASLR enabled will populate relocation entries upon boot and leave them as 0 in image. fix_kaslr_arm64.c and fix_kaslr_samsung.c can fix these images by re-populating relocation entries with their original addresses.
