@@ -975,7 +975,7 @@ def r2():
         return 0
 
     r2p.cmd("e asm.arch = arm")
-    r2p.cmd("e asm.bits = %d" % kallsyms['arch'])
+    r2p.cmd("e asm.bits = %d" % kallsyms['ptr_size'])
 
     siol_map = r2p.cmdj("omj")[0]["map"]
     set_baddr = "omr " + str(siol_map) + " " + str(kallsyms["_start"])
