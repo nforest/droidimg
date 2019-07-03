@@ -978,10 +978,10 @@ def r2():
     r2p.cmd("e asm.bits = %d" % kallsyms['ptr_size'])
 
     siol_map = r2p.cmdj("omj")[0]["map"]
-    set_baddr = "omr " + str(siol_map) + " " + str(kallsyms["_start"])
+    set_baddr = "omb " + str(siol_map) + " " + str(kallsyms["_start"])
     r2p.cmd(set_baddr)
 
-    seg = "S 0 " + str(kallsyms["_start"]) + " " + str(len(vmlinux)) + " .text rx"
+    seg = "s 0 " + str(kallsyms["_start"]) + " " + str(len(vmlinux)) + " .text rx"
     r2p.cmd(seg)
 
     r2p.cmd("fs symbols")
