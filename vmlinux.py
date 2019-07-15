@@ -918,10 +918,16 @@ def find_ksymtab(kallsyms, vmlinux):
     else:
         raise Exception("Unsupported ptr_size")
 
-    while idx < (len(vmlinux) - step):
-        # if (idx % 0x100000 == 0):
-        #     print_log("%x" % (idx))
+    # if we already have __start___ksymtab
+    try:
+        if idx == 0:
+            i = kallsyms['name'].index('__start___ksymtab')
+            addr = kallsyms['address'][i]
+            idx = addr - kallsyms['_start']
+    except:
+        pass
 
+    while idx < (len(vmlinux) - step):
         if is_ksymtab_pair(kallsyms, vmlinux, idx, symlist):
             ksym_count += 1
             idx += (step * 2)
@@ -945,7 +951,6 @@ def find_ksymtab(kallsyms, vmlinux):
         idx += (step * 2)
 
     print_log("[+]found %d symbols in ksymtab" % (len(symlist)))
-    # print_log(symlist)
 
     etext = kallsyms['_start'] + len(vmlinux)
     bss_start = kallsyms['_start'] + len(vmlinux)
