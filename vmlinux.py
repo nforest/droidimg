@@ -816,6 +816,8 @@ def do_kallsyms(kallsyms, vmlinux):
 
     check_miasm_symbols(vmlinux)
 
+    find_ksymtab(kallsyms, vmlinux)
+
     return
 
 def do_get_arch(kallsyms, vmlinux):
@@ -858,6 +860,110 @@ def print_kallsyms_json(kallsyms):
         pass
     kallsyms_json = json.dumps(kallsyms)
     print_sym(kallsyms_json)
+
+#////////////////////////////////////////////////////////////////////////////////////////////
+# Process ksymtab
+
+c_identity_patt = re.compile(b"([_a-zA-Z][_a-zA-Z0-9]*)\\x00")
+
+def is_ksymtab_pair(kallsyms, vmlinux, idx, symlist):
+    ptr1 = 0
+    ptr2 = 0
+    max_size = 128 * 1024 * 1024
+
+    if kallsyms['ptr_size'] == 64:
+        (ptr1, ) = struct.unpack("Q", vmlinux[idx:idx+8])
+        (ptr2, ) = struct.unpack("Q", vmlinux[idx+8:idx+16])
+    elif kallsyms['ptr_size'] == 32:
+        (ptr1, ) = struct.unpack("I", vmlinux[idx:idx+4])
+        (ptr2, ) = struct.unpack("I", vmlinux[idx+4:idx+8])
+    else:
+        raise Exception("Unsupported ptr_size")
+
+    # Must be in range
+    # if ptr1 < kallsyms['_start'] or ptr1 >= (kallsyms['_start'] + len(vmlinux)):
+    if ptr1 < kallsyms['_start'] or ptr1 >= (kallsyms['_start'] + max_size):
+        return False
+    if ptr2 < kallsyms['_start'] or ptr2 >= (kallsyms['_start'] + len(vmlinux)):
+        return False
+
+    # Check if ptr2 if pointing to a null-terminate string representing a valid C identity
+    i = ptr2 - kallsyms['_start']
+    substr = vmlinux[i:i+256]
+    m = c_identity_patt.match(substr)
+    if m is None:
+        return False
+
+    sym_name = m.group(1)
+    symlist.append((ptr1, sym_name))
+    return True
+
+def find_ksymtab(kallsyms, vmlinux):
+    idx = 0
+    ksym_count = 0
+    ksym_count_threshold = 256
+    step = 0
+
+    symlist = []
+
+    if kallsyms['ptr_size'] == 64:
+        step = 8
+    elif kallsyms['ptr_size'] == 32:
+        step = 4
+    else:
+        raise Exception("Unsupported ptr_size")
+
+    while idx < (len(vmlinux) - step):
+        # if (idx % 0x100000 == 0):
+        #     print_log("%x" % (idx))
+
+        if is_ksymtab_pair(kallsyms, vmlinux, idx, symlist):
+            ksym_count += 1
+            idx += (step * 2)
+
+            if (ksym_count >= ksym_count_threshold):
+                break
+        else:
+            ksym_count = 0
+            symlist = []
+            idx += step
+
+        continue
+
+    if (ksym_count < ksym_count_threshold):
+        print_log("[!]can't locate ksymtab")
+        return
+
+    while idx < (len(vmlinux) - step):
+        if not is_ksymtab_pair(kallsyms, vmlinux, idx, symlist):
+            break
+        idx += (step * 2)
+
+    print_log("[+]found %d symbols in ksymtab" % (len(symlist)))
+    # print_log(symlist)
+
+    etext = kallsyms['_start'] + len(vmlinux)
+    bss_start = kallsyms['_start'] + len(vmlinux)
+    try:
+        etext_idx = kallsyms['name'].index('_etext')
+        etext = kallsyms['address'][etext_idx]
+    except:
+        try:
+            etext_idx = kallsyms['name'].index('__start_rodata')
+            etext = kallsyms['address'][etext_idx]
+        except:
+            pass
+
+    for (addr, symname) in symlist:
+        t = 'd'
+        if addr < etext:
+            t = 't'
+        elif addr < bss_start:
+            t = 'd'  # we don't know if it is read-only, don't care either :-S
+        else:
+            t = 'b'
+
+        insert_symbol(symname, addr, t)
 
 #////////////////////////////////////////////////////////////////////////////////////////////
 # IDA Pro Plugin Support
