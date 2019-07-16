@@ -4,5 +4,6 @@ python:
 install:
   - sudo apt-get install p7zip-full
   - git clone https://github.com/idl3r/droidimg_test.git --depth 1
+  - pip install -r requirements.txt
 script:
   - ./droidimg_test/build.sh
