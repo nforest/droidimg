@@ -54,4 +54,6 @@ Linux version 4.9.17-g8ab68b3b (ubuntu@A7Linux) (gcc version 4.9.x 20150123 (pre
 
 In some cases, kernel image with KASLR enabled will populate relocation entries upon boot and leave them as 0 in image. fix_kaslr_arm64.c and fix_kaslr_samsung.c can fix these images by re-populating relocation entries with their original addresses.
 
-## CI enabled
+## CI Status
+
+[![Build Status](https://travis-ci.org/idl3r/droidimg.svg?branch=master)](https://travis-ci.org/idl3r/droidimg)
