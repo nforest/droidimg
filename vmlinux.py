@@ -563,9 +563,13 @@ def do_address_table(kallsyms, offset, vmlinux, addr_base_32 = 0xC0000000):
 def insert_symbol(name, addr, sym_type):
     idx = bisect.bisect_right(kallsyms['address'], addr)
 
-    if kallsyms['name'][idx-1] == name:
-        # Duplicate
-        return
+    # Check if name is duplicate, assuming address is correct
+    i = idx - 1
+    if i < kallsyms['numsyms']:
+        while i >= 0 and kallsyms['address'][i] == addr:
+            if kallsyms['name'][i] == name:
+                return
+            i -= 1
 
     kallsyms['address'].insert(idx, addr)
     kallsyms['type'].insert(idx, sym_type)
