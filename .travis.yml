@@ -1,6 +1,7 @@
 language: python
 python:
   - "2.7"
+  - "3.6"
 install:
   - sudo apt-get -y install p7zip-full
   - git clone https://github.com/idl3r/droidimg_test.git --depth 1
