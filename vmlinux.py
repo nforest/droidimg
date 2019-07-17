@@ -904,6 +904,10 @@ def is_ksymtab_pair(kallsyms, vmlinux, idx, symlist):
         return False
 
     sym_name = m.group(1)
+    try:
+        sym_name = sym_name.decode('utf-8')
+    except:
+        pass
     symlist.append((ptr1, sym_name))
     return True
 
