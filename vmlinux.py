@@ -1075,9 +1075,9 @@ def load_file(li, neflags, format):
 
     for i in range(kallsyms['numsyms']):
         if kallsyms['type'][i] in ['t','T']:
-            idaapi.add_entry(kallsyms['address'][i], kallsyms['address'][i], kallsyms['name'][i], 1)
+            idaapi.add_entry(kallsyms['address'][i], kallsyms['address'][i], kallsyms['name'][i].encode('utf-8'), 1)
         else:
-            idaapi.add_entry(kallsyms['address'][i], kallsyms['address'][i], kallsyms['name'][i], 0)
+            idaapi.add_entry(kallsyms['address'][i], kallsyms['address'][i], kallsyms['name'][i].encode('utf-8'), 0)
 
     print_log("Android/Linux vmlinux loaded...")
     return 1
