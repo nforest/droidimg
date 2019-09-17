@@ -1,9 +1,12 @@
 language: python
 python:
   - "2.7"
+  - "3.5"
 install:
   - sudo apt-get -y install p7zip-full
   - git clone https://github.com/idl3r/droidimg_test.git --depth 1
   - pip install -r requirements.txt
+  - if [[ $TRAVIS_PYTHON_VERSION == 2.7 ]]; then pip install ./droidimg_test/miasm-0.1.1.dev162-cp27-cp27mu-linux_x86_64.whl; fi
+  - if [[ $TRAVIS_PYTHON_VERSION == 3.5 ]]; then pip install ./droidimg_test/miasm-0.1.1.dev168-cp35-cp35m-linux_x86_64.whl; fi
 script:
   - ./droidimg_test/build.sh
