@@ -10,7 +10,11 @@
 #include <stdio.h>
 #include <string.h>
 
+#ifdef __linux__
 #include <linux/limits.h>
+#else
+#include <limits.h>
+#endif
 
 #define KERNEL_TEXT   (va_kern_text[va_bits])
 #define MIN_ADDR      (va_min_addr[va_bits])
