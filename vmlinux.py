@@ -1002,7 +1002,7 @@ def accept_file(li, n):
 
     # ida 7+ compatibility, n is filename
     # we support only one format per file
-    if isinstance(n, (int, long)):
+    if isinstance(n, int):
         if n > 0:
             return 0
 
