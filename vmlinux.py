@@ -1031,7 +1031,7 @@ def load_file(li, neflags, format):
         print_log('[!]get kallsyms error...')
         return 0
 
-    idaapi.set_processor_type("arm", idaapi.SETPROC_ALL|idaapi.SETPROC_FATAL)
+    idaapi.set_processor_type("arm", idaapi.SETPROC_LOADER_NON_FATAL|idaapi.SETPROC_LOADER)
     if kallsyms['arch'] == 'arm64':
         idaapi.get_inf_structure().lflags |= idaapi.LFLG_64BIT
 
@@ -1057,27 +1057,27 @@ def load_file(li, neflags, format):
 
     s = idaapi.segment_t()
     s.bitness = kallsyms['ptr_size'] // 32
-    s.startEA = kallsyms['_start']
+    s.start_ea = kallsyms['_start']
     if sinittext_addr == 0:
-        s.endEA = max_sym_addr
+        s.end_ea = max_sym_addr
     else:
-        s.endEA = sinittext_addr
+        s.end_ea = sinittext_addr
     s.perm = 5
     idaapi.add_segm_ex(s,".text","CODE",idaapi.ADDSEG_OR_DIE)
 
     if sinittext_addr > 0:
         s = idaapi.segment_t()
         s.bitness = kallsyms['ptr_size'] // 32
-        s.startEA = sinittext_addr
-        s.endEA = max_sym_addr
+        s.start_ea = sinittext_addr
+        s.end_ea = max_sym_addr
         s.perm = 7
         idaapi.add_segm_ex(s,".data","DATA",idaapi.ADDSEG_OR_DIE)
 
     for i in range(kallsyms['numsyms']):
         if kallsyms['type'][i] in ['t','T']:
-            idaapi.add_entry(kallsyms['address'][i], kallsyms['address'][i], kallsyms['name'][i].encode('utf-8'), 1)
+            idaapi.add_entry(kallsyms['address'][i], kallsyms['address'][i], kallsyms['name'][i], 1)
         else:
-            idaapi.add_entry(kallsyms['address'][i], kallsyms['address'][i], kallsyms['name'][i].encode('utf-8'), 0)
+            idaapi.add_entry(kallsyms['address'][i], kallsyms['address'][i], kallsyms['name'][i], 0)
 
     print_log("Android/Linux vmlinux loaded...")
     return 1
