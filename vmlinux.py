@@ -935,7 +935,7 @@ def find_ksymtab(kallsyms, vmlinux):
     except:
         pass
 
-    while idx < (len(vmlinux) - step):
+    while idx < (len(vmlinux) - step*2):
         if is_ksymtab_pair(kallsyms, vmlinux, idx, symlist):
             ksym_count += 1
             idx += (step * 2)
