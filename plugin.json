@@ -1,0 +1,32 @@
+{
+  "pluginmetadataversion": 2,
+  "name": "Droidimg Loader",
+  "type": [
+    "ui"
+  ],
+  "api": [
+    "python3"
+  ],
+  "description": "Simple loader for droid kernel images",
+  "longdescription": "Simple loader for droid kernel images. Based on https://github.com/nforest/droidimg/ and https://github.com/NWMonster/binja_droidimg Note that Vector 35 changes are released under the MIT license, but as the original plugins were un-licensed it's not entirely clear what their intended license status is.",
+  "license": {
+    "name": "MIT",
+    "text": "Copyright (c) 2019 Vector 35 Inc\n\nPermission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the \"Software\"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:\n\nThe above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.\n\nTHE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE."
+  },
+  "platforms": [
+    "Darwin",
+    "Linux",
+    "Windows"
+  ],
+  "installinstructions": {
+    "Darwin": "no special instructions, package manager is recommended",
+    "Linux": "no special instructions, package manager is recommended",
+    "Windows": "no special instructions, package manager is recommended"
+  },
+  "dependencies": {
+    "pip": []
+  },
+  "version": "1.00",
+  "author": "Vector 35 Inc",
+  "minimumbinaryninjaversion": 3233
+}

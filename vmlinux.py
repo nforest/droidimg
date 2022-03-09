@@ -23,6 +23,11 @@ except:
 
 radare2 = True if 'R2PIPE_IN' in os.environ else False
 
+try:
+    import binaryninja
+except:
+    binaryninja = None
+
 args = None
 
 #////////////////////////////////////////////////////////////////////////////////////////////
@@ -1176,6 +1181,8 @@ if idaapi:
 elif radare2:
     import r2pipe
     r2()
+elif binaryninja:
+    pass
 else:
     if __name__ == "__main__":
         main(sys.argv)
