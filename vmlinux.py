@@ -1210,6 +1210,9 @@ def r2():
 def parse_vmlinux(filename, log=None, sym=None):
     global log_file
     global sym_file
+    global ver_major
+    global ver_minor
+    global g_gki_kernel
 
     log_file = log
     sym_file = sym
@@ -1217,13 +1220,18 @@ def parse_vmlinux(filename, log=None, sym=None):
     if os.path.exists(filename):
         vmlinux = open(filename, 'rb').read()
 
-        pat = re.compile(b"Linux version \d+\.\d+\.\d+.*")
+        pat = re.compile(b"Linux version (\d+)\.(\d+)\.(\d+).*")
         matches = pat.search(vmlinux)
         if matches is None:
             print_log("[!]can't locate linux banner...")
         else:
             kallsyms['linux_banner'] = matches.group(0)
+            ver_major = int(matches.group(1))
+            ver_minor = int(matches.group(2))
             print_log(kallsyms['linux_banner'])
+            print_log("[+]Version: ", ver_major, ".", ver_minor)
+            if (ver_major >= 5):
+                g_gki_kernel = 1
 
         do_get_arch(kallsyms, vmlinux)
         do_kallsyms(kallsyms, vmlinux)
