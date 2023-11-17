@@ -513,7 +513,7 @@ def do_offset_table(kallsyms, start, vmlinux):
 
     return 0
 
-def do_offset_table_gki(kallsyms, start, vmlinux):
+def do_offset_table_alt(kallsyms, start, vmlinux):
     # For some latest GKI kernels, especially 5.0+, offset table looks differently
     step = 4    # this is fixed step
 
@@ -803,13 +803,12 @@ def do_kallsyms(kallsyms, vmlinux):
 
         # For latest GKI kernels, there could be different offset table
         if kallsyms['numsyms'] == 0:
-            print_log('[!]could be GKI kernel...')
+            print_log('[!]could be alternative offset table...')
             is_offset_table = 1
-            g_gki_kernel = 1
             offset = 0
             step = 4
             while offset+step < vmlen:
-                num = do_offset_table_gki(kallsyms, offset, vmlinux)
+                num = do_offset_table_alt(kallsyms, offset, vmlinux)
 
                 if num > min_numsyms:
                     kallsyms['numsyms'] = num
