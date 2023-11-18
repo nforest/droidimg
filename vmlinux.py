@@ -65,6 +65,7 @@ g_cpu = None
 
 g_mem_access = {}
 
+g_gki_kernel = 0
 
 # Handler
 def mem_breakpoint_handler(jitter):
@@ -316,16 +317,28 @@ def do_token_table(kallsyms, offset, vmlinux):
     do_token_index_table(kallsyms , offset, vmlinux)
 
 def do_marker_table(kallsyms, offset, vmlinux):
+    global g_gki_kernel
+
     kallsyms['marker_table'] = offset
     print_log('[+]kallsyms_marker_table = ', hex(offset))
 
-    offset += (((kallsyms['numsyms']-1)>>8)+1)*(kallsyms['ptr_size'] // 8)
+    if (g_gki_kernel == 1):
+        offset += (((kallsyms['numsyms']-1)>>8)+1)*4    # Markers are unsigned int
+    else:
+        offset += (((kallsyms['numsyms']-1)>>8)+1)*(kallsyms['ptr_size'] // 8)
     offset = STRIPZERO(offset, vmlinux)
 
     do_token_table(kallsyms, offset, vmlinux)
 
 
 def do_type_table(kallsyms, offset, vmlinux):
+    global g_gki_kernel
+
+    if (g_gki_kernel == 1):
+        offset -= 4     # first entry is always 0, thus skipped by STRIPZERO
+        do_marker_table(kallsyms, offset, vmlinux)
+        return
+
     flag = True
     for i in range(offset,offset+256*4,4):
         if INT(i, vmlinux) & ~0x20202020 != 0x54545454:
@@ -356,6 +369,7 @@ def do_name_table(kallsyms, offset, vmlinux):
     while offset%4 != 0:
         offset += 1
     offset = STRIPZERO(offset, vmlinux)
+    print_log('[+]end of kallsyms_name_table = ', hex(offset))
 
     do_type_table(kallsyms, offset, vmlinux)
 
@@ -490,7 +504,52 @@ def do_offset_table(kallsyms, start, vmlinux):
             else:
                 return 1
         elif status == 2:
-            if (offset > 0) and (offset >= prev_offset) and (offset < 0x80000000) and \
+            if (offset > 0) and (offset >= prev_offset) and (offset < 0x8000000) and \
+            (prev_offset != 0 or offset - prev_offset < 0xf8000):   # For latest aarch32 kernels, since kallsyms_offsets start with 0xf8000
+                kallsyms['address'].append(relative_base + offset)
+                prev_offset = offset
+            else:
+                return (i - start) // step
+
+    return 0
+
+def do_offset_table_alt(kallsyms, start, vmlinux):
+    # For some latest GKI kernels, especially 5.0+, offset table looks differently
+    step = 4    # this is fixed step
+
+    kallsyms['address'] = []
+    prev_offset = 0
+    relative_base = 0   # We will determine this later
+
+    # status
+    #   0: looking for 1st 00 00 00 00
+    #   1: looking for 1nd 00 01 00 00
+    #   2: looking for 2nd 00 01 00 00
+    #   3: looking for non-zero ascending offset seq
+    status = 0
+    for i in range(start, len(vmlinux), step):
+        offset = INT32(i, vmlinux)
+
+        if status == 0:
+            if offset == 0:
+                kallsyms['address'].append(relative_base + offset)
+                status = 1
+            else:
+                return 0
+        elif status == 1:
+            if offset == 0x10000:
+                kallsyms['address'].append(relative_base + offset)
+                status = 2
+            else:
+                return 1
+        elif status == 2:
+            if offset == 0x10000:
+                kallsyms['address'].append(relative_base + offset)
+                status = 3
+            else:
+                return 2
+        elif status == 3:
+            if (offset > 0) and (offset >= prev_offset) and (offset < 0x8000000) and \
             (prev_offset != 0 or offset - prev_offset < 0xf8000):   # For latest aarch32 kernels, since kallsyms_offsets start with 0xf8000
                 kallsyms['address'].append(relative_base + offset)
                 prev_offset = offset
@@ -675,6 +734,8 @@ def find_sys_call_table(kallsyms, vmlinux):
 
 
 def do_kallsyms(kallsyms, vmlinux):
+    global g_gki_kernel
+
     step = kallsyms['ptr_size'] // 8
     min_numsyms = 20000
 
@@ -730,6 +791,24 @@ def do_kallsyms(kallsyms, vmlinux):
             offset = 0
             while offset+step < vmlen:
                 num = do_offset_table_arm(kallsyms, offset, vmlinux)
+
+                if num > min_numsyms:
+                    kallsyms['numsyms'] = num
+                    break
+                else:
+                    if num > 2:
+                        offset += (num) * step
+                    else:
+                        offset += step
+
+        # For latest GKI kernels, there could be different offset table
+        if kallsyms['numsyms'] == 0:
+            print_log('[!]could be alternative offset table...')
+            is_offset_table = 1
+            offset = 0
+            step = 4
+            while offset+step < vmlen:
+                num = do_offset_table_alt(kallsyms, offset, vmlinux)
 
                 if num > min_numsyms:
                     kallsyms['numsyms'] = num
@@ -1130,6 +1209,9 @@ def r2():
 def parse_vmlinux(filename, log=None, sym=None):
     global log_file
     global sym_file
+    global ver_major
+    global ver_minor
+    global g_gki_kernel
 
     log_file = log
     sym_file = sym
@@ -1137,13 +1219,18 @@ def parse_vmlinux(filename, log=None, sym=None):
     if os.path.exists(filename):
         vmlinux = open(filename, 'rb').read()
 
-        pat = re.compile(b"Linux version \d+\.\d+\.\d+.*")
+        pat = re.compile(b"Linux version (\d+)\.(\d+)\.(\d+).*")
         matches = pat.search(vmlinux)
         if matches is None:
             print_log("[!]can't locate linux banner...")
         else:
             kallsyms['linux_banner'] = matches.group(0)
+            ver_major = int(matches.group(1))
+            ver_minor = int(matches.group(2))
             print_log(kallsyms['linux_banner'])
+            print_log("[+]Version: ", ver_major, ".", ver_minor)
+            if (ver_major >= 5):
+                g_gki_kernel = 1
 
         do_get_arch(kallsyms, vmlinux)
         do_kallsyms(kallsyms, vmlinux)
