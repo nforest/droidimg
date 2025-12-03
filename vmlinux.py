@@ -115,6 +115,8 @@ def miasm_load_vmlinux(kallsyms, vmlinux):
         g_cpu = "arml"
     elif kallsyms['arch'] == 'arm64':
         g_cpu = "aarch64l"
+    elif kallsyms['arch'] == 'x86':
+        g_cpu = "x86_32"
     else:
         raise Exception('Invalid arch')
 
@@ -210,6 +212,21 @@ def get_mem_access(kallsyms, sym_name, args):
             elif reg == 'X7':
                 g_jitter.cpu.X7 = value
             g_jitter.cpu.SP = 0xdead2000
+    elif g_cpu == 'x86_32':
+        for reg, value in args.items():
+            if reg == 'EAX':
+                g_jitter.cpu.EAX = value
+            elif reg == 'EBX':
+                g_jitter.cpu.EBX = value
+            elif reg == 'ECX':
+                g_jitter.cpu.ECX = value
+            elif reg == 'EDX':
+                g_jitter.cpu.EDX = value
+            elif reg == 'ESI':
+                g_jitter.cpu.ESI = value
+            elif reg == 'EDI':
+                g_jitter.cpu.EDI = value
+            g_jitter.cpu.ESP = 0xdead2000
     else:
         raise Exception('Invalid arch')
 
@@ -226,6 +243,8 @@ def get_mem_access(kallsyms, sym_name, args):
         g_jitter.cpu.LR = 0xdead0000
     elif g_cpu == 'aarch64l':
         g_jitter.cpu.LR = 0xdead0000
+    elif g_cpu == 'x86_32':
+        g_jitter.cpu.set_mem(g_jitter.cpu.ESP, struct.pack('<I', 0xdead0000))  # return address on stack
 
     g_mem_access = {}
 
@@ -443,6 +462,8 @@ def do_guess_start_address(kallsyms, vmlinux):
             step = kallsyms['ptr_size'] // 8
             if kallsyms['arch'] == 'arm':
                 addr_base = 0xC0008000
+            elif kallsyms['arch'] == 'x86':
+                addr_base = 0xC0000000
             else:
                 addr_base = 0xffffff8008080000
 
@@ -602,6 +623,8 @@ def do_address_table(kallsyms, offset, vmlinux, addr_base_32 = 0xC0000000):
     step = kallsyms['ptr_size'] // 8
     if kallsyms['arch'] == 'arm':
         addr_base = addr_base_32
+    elif kallsyms['arch'] == 'x86':
+        addr_base = addr_base_32
     else:
         addr_base = 0xffffff8008000000
 
@@ -662,6 +685,8 @@ def check_miasm_symbols(vmlinux):
                 call_args['X0'] = 0x10000000
             elif kallsyms['arch'] == 'arm':
                 call_args['R0'] = 0x10000000
+            elif kallsyms['arch'] == 'x86':
+                call_args['EAX'] = 0x10000000
 
             loc_selinux_enforcing = 0
             for access in get_mem_access(kallsyms, 'enforcing_setup', call_args):
@@ -702,6 +727,19 @@ def find_sys_call_table(kallsyms, vmlinux):
         symbols.append('sys_io_destroy')
         symbols.append('sys_io_submit')
         symbols.append('sys_io_cancel')
+        pass
+    elif kallsyms['arch'] == 'x86':
+        '''
+        x86 syscall table starts with:
+        #define __NR_restart_syscall 0
+        #define __NR_exit 1
+        #define __NR_fork 2
+        #define __NR_read 3
+        '''
+        symbols.append('sys_restart_syscall')
+        symbols.append('sys_exit')
+        symbols.append('sys_fork')
+        symbols.append('sys_read')
         pass
     else:
         return
@@ -747,7 +785,7 @@ def do_kallsyms(kallsyms, vmlinux):
     while offset+step < vmlen:
         num = do_address_table(kallsyms, offset, vmlinux)
         if num > min_numsyms:
-            if (kallsyms['arch'] == 'arm') or \
+            if (kallsyms['arch'] == 'arm') or (kallsyms['arch'] == 'x86') or \
             (kallsyms['address'][0] // 0x100000000 == 0xffffffc0 or \
             kallsyms['address'][0] // 0x100000000 == 0xffffff80):
                 kallsyms['numsyms'] = num
@@ -886,6 +924,15 @@ def do_kallsyms(kallsyms, vmlinux):
                 sym_addr = kallsyms['_start'] + match.start()
                 insert_symbol('vermagic', sym_addr, 'r')
                 print_log('[!]no vermagic symbol, found @ %s' % (hex(sym_addr)))
+        elif kallsyms['arch'] == 'x86':
+            pattern = b'(\\d+\\.\\d+\\.\\d+(\\S+)? SMP [a-zA-Z_ ]*(i[3-6]86|x86))'
+            match = re.search(pattern, vmlinux)
+            if match is None:
+                pass
+            else:
+                sym_addr = kallsyms['_start'] + match.start()
+                insert_symbol('vermagic', sym_addr, 'r')
+                print_log('[!]no vermagic symbol, found @ %s' % (hex(sym_addr)))
 
     # fix missing linux_banner
     if 'linux_banner' not in kallsyms['name']:
@@ -924,12 +971,42 @@ def do_get_arch(kallsyms, vmlinux):
                         offset = i+step
         return False
 
+    def fuzzy_x86(vmlinux):
+        # Look for x86-specific patterns and address ranges
+        step = 4
+        offset = 0
+        vmlen  = len(vmlinux) - len(vmlinux)%4
+        addr_base = 0xC0000000  # typical x86 kernel base
+        count = 0
+        while offset+step < vmlen:
+          for i in range(offset, min(offset + 0x100000, vmlen), step):
+                addr = INT32(i, vmlinux)
+                if addr >= addr_base and addr < 0xF0000000:
+                    count += 1
+                    if count > 10000:
+                        return True
+                elif count > 0:
+                    offset = i+step
+                    count = 0
+                    break
+          else:
+              break
+        return False
+
+    # Check for ARM64
     if re.search(b'ARMd', vmlinux[:0x200]):
         kallsyms['arch'] = 'arm64'
         kallsyms['ptr_size'] = 64
     elif fuzzy_arm64(vmlinux):
         kallsyms['arch'] = 'arm64'
         kallsyms['ptr_size'] = 64
+    # Check for x86 patterns
+    elif re.search(b'(i[3-6]86|x86)', vmlinux[:0x10000]):
+        kallsyms['arch'] = 'x86'
+        kallsyms['ptr_size'] = 32
+    elif fuzzy_x86(vmlinux):
+        kallsyms['arch'] = 'x86'
+        kallsyms['ptr_size'] = 32
     else:
         kallsyms['arch'] = 'arm'
         kallsyms['ptr_size'] = 32
@@ -1089,7 +1166,7 @@ def accept_file(li, n):
     # if magic != 'ANDROID!':
     #     return 0
 
-    return "Android/Linux Kernel Image(ARM)"
+    return "Android/Linux Kernel Image (ARM/x86)"
 
 def load_file(li, neflags, format):
     """
@@ -1110,7 +1187,10 @@ def load_file(li, neflags, format):
         print_log('[!]get kallsyms error...')
         return 0
 
-    idaapi.set_processor_type("arm", idaapi.SETPROC_LOADER_NON_FATAL|idaapi.SETPROC_LOADER)
+    if kallsyms['arch'] == 'x86':
+        idaapi.set_processor_type("metapc", idaapi.SETPROC_LOADER_NON_FATAL|idaapi.SETPROC_LOADER)
+    else:
+        idaapi.set_processor_type("arm", idaapi.SETPROC_LOADER_NON_FATAL|idaapi.SETPROC_LOADER)
     if kallsyms['arch'] == 'arm64':
         idaapi.get_inf_structure().lflags |= idaapi.LFLG_64BIT
 
@@ -1121,6 +1201,9 @@ def load_file(li, neflags, format):
     for i in range(kallsyms['numsyms']):
         if kallsyms['arch'] == 'arm':
             if kallsyms['address'][i] > 0xd0000000:
+                continue
+        elif kallsyms['arch'] == 'x86':
+            if kallsyms['address'][i] > 0xf0000000:
                 continue
 
         if kallsyms['name'][i] == '_sinittext':
@@ -1177,7 +1260,10 @@ def r2():
         print_log('[!]get kallsyms error...')
         return 0
 
-    r2p.cmd("e asm.arch = arm")
+    if kallsyms['arch'] == 'x86':
+        r2p.cmd("e asm.arch = x86")
+    else:
+        r2p.cmd("e asm.arch = arm")
     r2p.cmd("e asm.bits = %d" % kallsyms['ptr_size'])
 
     siol_map = r2p.cmdj("omj")[0]["map"]
