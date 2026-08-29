@@ -18,6 +18,10 @@ from builtins import range
 
 try:
     import idaapi
+    is_ida9 = idaapi.IDA_SDK_VERSION >= 900
+    if is_ida9:
+        import ida_ida
+        import ida_idp
 except:
     idaapi = None
 
@@ -1110,9 +1114,20 @@ def load_file(li, neflags, format):
         print_log('[!]get kallsyms error...')
         return 0
 
-    idaapi.set_processor_type("arm", idaapi.SETPROC_LOADER_NON_FATAL|idaapi.SETPROC_LOADER)
+    if is_ida9:
+        # IDA 7.x - 8.x
+        ida_idp.set_processor_type("arm", ida_idp.SETPROC_LOADER_NON_FATAL|ida_idp.SETPROC_LOADER)
+    else:
+        # IDA 9.x+
+        idaapi.set_processor_type("arm", idaapi.SETPROC_LOADER_NON_FATAL|idaapi.SETPROC_LOADER)
+
     if kallsyms['arch'] == 'arm64':
-        idaapi.get_inf_structure().lflags |= idaapi.LFLG_64BIT
+        if is_ida9:
+            # IDA 9.x+
+            ida_ida.inf_set_64bit(True)
+        else:
+            # IDA 7.x - 8.x
+            idaapi.get_inf_structure().lflags |= idaapi.LFLG_64BIT
 
     li.file2base(0, kallsyms['_start'], kallsyms['_start']+li.size(), True)
 
